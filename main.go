@@ -74,21 +74,29 @@ func getGitStatus() (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if strings.Contains(string(output), "nothing to commit") {
+		return "", fmt.Errorf("nothing to commit")
+	}
 	return string(output), nil
 }
 
 const (
 	modelVersion = "claude-3-5-sonnet-20240620"
 	maxTokens    = 3000
-	systemPrompt = `You are an AI assistant specialized in generating concise and descriptive git commit messages. Analyze the provided git status and diff, then create a commit message that accurately summarizes the changes. Focus on the most important modifications and their impact. Keep the message clear and to the point. NO YAPPING.`
+	systemPrompt = `
+	You are an AI assistant specialized in generating descriptive git commit messages. 
+	Analyze the provided git status and diff, then create a commit message that accurately summarizes the changes. 
+	Focus on the most important modifications and their impact. Keep the message clear and to the point. NO YAPPING.
+	`
 )
 
 func getGitDiff() (string, error) {
-	cmd := exec.Command("git", "diff", "--cached")
+	cmd := exec.Command("git", "--no-pager", "diff")
 	output, err := cmd.Output()
 	if err != nil {
 		return "", err
 	}
+	// log.Fatal().Msgf("Git diff:\n\n%s", string(output))
 
 	if len(output) > maxTokens {
 		log.Warn().Msg("Git diff truncated due to length")
@@ -102,11 +110,11 @@ func getGitDiff() (string, error) {
 func generateCommitMessage(status, diff, apiKey string) (string, error) {
 	url := "https://api.anthropic.com/v1/messages"
 
-	prompt := fmt.Sprintf("Git status:\n\n%s\n\nGit diff:\n\n%s\n\nBased on this information, generate a concise and descriptive commit message:", status, diff)
+	prompt := fmt.Sprintf("Git status:\n\n%s\n\nGit diff:\n\n%s\n\nBased on this information, generate a good and descriptive commit message, fit into 100 tokens max:", status, diff)
 
 	requestBody, err := json.Marshal(map[string]interface{}{
 		"model":      modelVersion,
-		"max_tokens": 1000,
+		"max_tokens": 300,
 		"messages": []map[string]interface{}{
 			{
 				"role": "user",
@@ -170,10 +178,10 @@ func generateCommitMessage(status, diff, apiKey string) (string, error) {
 }
 
 func executeGitCommit(message string) error {
-	log.Info().Msgf("Executing git commit with message: \n\n%s", message)
-	return nil
+	// log.Info().Msgf("Executing git commit with message: \n\n%s", message)
+	// return nil
 
-	cmd := exec.Command("git", "commit", "-m", message)
+	cmd := exec.Command("git", "commit", "-am", message)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("git commit failed: %v\nOutput: %s", err, string(output))

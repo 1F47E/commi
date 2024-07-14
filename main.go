@@ -88,14 +88,12 @@ type commit struct {
 
 func generateCommitMessage(client LLMClient, status, diffs string) (*commit, error) {
 	modelName := getModelName(client)
-	spinner := initializeSpinner()
-	spinnerProgram, spinnerDone, startTime := runSpinner(spinner)
-
-	updateSpinnerText(spinnerProgram, fmt.Sprintf("Generating commit message using %s...", modelName))
+	spinner := NewSpinner()
+	spinner.Start(fmt.Sprintf("Generating commit message using %s...", modelName))
 
 	commitMessage, err := client.GenerateCommitMessage(status, diffs)
 
-	stopSpinner(spinnerProgram, spinnerDone, startTime)
+	spinner.Stop()
 
 	if err != nil {
 		return nil, err

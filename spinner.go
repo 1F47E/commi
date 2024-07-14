@@ -10,36 +10,14 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-func initializeSpinner() spinner.Model {
-	s := spinner.New()
-	s.Spinner = spinner.Dot
-	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
-	return s
+type Spinner struct {
+	program  *tea.Program
+	model    spinnerModel
+	doneChan chan struct{}
+	startTime time.Time
 }
 
-func runSpinner(s spinner.Model) (*tea.Program, chan struct{}, time.Time) {
-	startTime := time.Now()
-	p := tea.NewProgram(initialModel(s))
-	spinnerDone := make(chan struct{})
-	go func() {
-		if _, err := p.Run(); err != nil {
-			log.Error().Err(err).Msg("Error running spinner")
-		}
-		close(spinnerDone)
-	}()
-	return p, spinnerDone, startTime
-}
-
-func stopSpinner(p *tea.Program, spinnerDone chan struct{}, startTime time.Time) {
-	p.Send(doneMsg{duration: time.Since(startTime)})
-	<-spinnerDone
-}
-
-type doneMsg struct {
-	duration time.Duration
-}
-
-type model struct {
+type spinnerModel struct {
 	spinner  spinner.Model
 	quitting bool
 	err      error
@@ -48,15 +26,57 @@ type model struct {
 	text     string
 }
 
-func initialModel(s spinner.Model) model {
-	return model{spinner: s, state: "running", text: "Generating commit message..."}
+func NewSpinner() *Spinner {
+	s := spinner.New()
+	s.Spinner = spinner.Dot
+	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
+	
+	model := spinnerModel{
+		spinner: s,
+		state:   "idle",
+		text:    "Initializing...",
+	}
+	
+	return &Spinner{
+		model:    model,
+		doneChan: make(chan struct{}),
+	}
 }
 
-func (m model) Init() tea.Cmd {
+func (s *Spinner) Start(message string) {
+	s.model.state = "running"
+	s.model.text = message
+	s.startTime = time.Now()
+	
+	s.program = tea.NewProgram(s.model)
+	go func() {
+		if _, err := s.program.Run(); err != nil {
+			log.Error().Err(err).Msg("Error running spinner")
+		}
+		close(s.doneChan)
+	}()
+}
+
+func (s *Spinner) Stop() {
+	s.program.Send(doneMsg{duration: time.Since(s.startTime)})
+	<-s.doneChan
+}
+
+func (s *Spinner) UpdateText(text string) {
+	s.program.Send(updateTextMsg(text))
+}
+
+type doneMsg struct {
+	duration time.Duration
+}
+
+type updateTextMsg string
+
+func (m spinnerModel) Init() tea.Cmd {
 	return m.spinner.Tick
 }
 
-func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m spinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -81,7 +101,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 }
 
-func (m model) View() string {
+func (m spinnerModel) View() string {
 	if m.err != nil {
 		return m.err.Error()
 	}
@@ -94,9 +114,3 @@ func (m model) View() string {
 		return fmt.Sprintf("\n\n   %s %s\n\n", m.spinner.View(), m.text)
 	}
 }
-
-func updateSpinnerText(p *tea.Program, text string) {
-	p.Send(updateTextMsg(text))
-}
-
-type updateTextMsg string

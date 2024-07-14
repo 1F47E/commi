@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -30,54 +31,79 @@ func main() {
 		os.Exit(1)
 	}
 }
-
 func runAICommit(cmd *cobra.Command, args []string) {
-	status, err := getGitStatus()
+	status, diff, err := getGitInfo()
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to get git status")
+		log.Error().Err(err).Msg("Failed to get git information")
 		os.Exit(1)
 	}
 
-	diff, err := getGitDiff()
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to get git diff")
-		os.Exit(1)
-	}
-
-	apiKey := os.Getenv("ANTHROPIC_API_KEY")
+	apiKey := getAPIKey()
 	if apiKey == "" {
 		log.Error().Msg("ANTHROPIC_API_KEY environment variable is not set")
 		os.Exit(1)
 	}
 
-	commitMessage, err := generateCommitMessage(status, diff, apiKey)
+	client := NewAnthropicClient(apiKey)
+	commitMessage, err := generateCommitMessage(client, status, diff)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to generate commit message")
 		os.Exit(1)
 	}
 
-	log.Info().Msg("Generated commit message:")
-	fmt.Println(commitMessage)
-
-	err = executeGitCommit(commitMessage)
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to execute git commit")
-		os.Exit(1)
-	}
-
-	log.Info().Msg("Commit successfully created!")
+	handleUserResponse(cmd, args, commitMessage)
 }
 
-func getGitStatus() (string, error) {
-	cmd := exec.Command("git", "status", "--porcelain")
-	output, err := cmd.Output()
+func getGitInfo() (string, string, error) {
+	status, err := getGitStatus()
+	if err != nil {
+		return "", "", fmt.Errorf("failed to get git status: %w", err)
+	}
+
+	diff, err := getGitDiff()
+	if err != nil {
+		return "", "", fmt.Errorf("failed to get git diff: %w", err)
+	}
+
+	return status, diff, nil
+}
+
+func getAPIKey() string {
+	return os.Getenv("ANTHROPIC_API_KEY")
+}
+
+func generateCommitMessage(client *AnthropicClient, status, diff string) (string, error) {
+	commitMessage, err := client.GenerateCommitMessage(status, diff)
 	if err != nil {
 		return "", err
 	}
-	if strings.Contains(string(output), "nothing to commit") {
-		return "", fmt.Errorf("nothing to commit")
+
+	log.Info().Msg("Generated commit message:")
+	fmt.Println(commitMessage)
+
+	return commitMessage, nil
+}
+
+func handleUserResponse(cmd *cobra.Command, args []string, commitMessage string) {
+	fmt.Print("\n\nDo you want to proceed with this commit message? (y/n/redo, default: y): ")
+	reader := bufio.NewReader(os.Stdin)
+	response, _ := reader.ReadString('\n')
+	response = strings.TrimSpace(strings.ToLower(response))
+
+	switch response {
+	case "n":
+		log.Info().Msg("Commit aborted.")
+	case "redo":
+		log.Info().Msg("Regenerating commit message...")
+		runAICommit(cmd, args)
+	default:
+		err := executeGitCommit(commitMessage)
+		if err != nil {
+			log.Error().Err(err).Msg("Failed to execute git commit")
+			os.Exit(1)
+		}
+		log.Info().Msg("Commit successfully created!")
 	}
-	return string(output), nil
 }
 
 const (
@@ -90,26 +116,19 @@ const (
 	`
 )
 
-func getGitDiff() (string, error) {
-	cmd := exec.Command("git", "--no-pager", "diff")
-	output, err := cmd.Output()
-	if err != nil {
-		return "", err
-	}
-	// log.Fatal().Msgf("Git diff:\n\n%s", string(output))
-
-	if len(output) > maxTokens {
-		log.Warn().Msg("Git diff truncated due to length")
-		output = output[:maxTokens]
-		output = append(output, []byte("\n... (truncated)")...)
-	}
-
-	return string(output), nil
+type AnthropicClient struct {
+	apiKey string
+	url    string
 }
 
-func generateCommitMessage(status, diff, apiKey string) (string, error) {
-	url := "https://api.anthropic.com/v1/messages"
+func NewAnthropicClient(apiKey string) *AnthropicClient {
+	return &AnthropicClient{
+		apiKey: apiKey,
+		url:    "https://api.anthropic.com/v1/messages",
+	}
+}
 
+func (c *AnthropicClient) GenerateCommitMessage(status, diff string) (string, error) {
 	prompt := fmt.Sprintf("Git status:\n\n%s\n\nGit diff:\n\n%s\n\nBased on this information, generate a good and descriptive commit message, fit into 100 tokens max:", status, diff)
 
 	requestBody, err := json.Marshal(map[string]interface{}{
@@ -129,13 +148,13 @@ func generateCommitMessage(status, diff, apiKey string) (string, error) {
 		return "", fmt.Errorf("failed to marshal request body: %v", err)
 	}
 
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(requestBody))
+	req, err := http.NewRequest("POST", c.url, bytes.NewBuffer(requestBody))
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %v", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-api-key", apiKey)
+	req.Header.Set("x-api-key", c.apiKey)
 	req.Header.Set("anthropic-version", "2023-06-01")
 
 	client := &http.Client{}
@@ -177,10 +196,35 @@ func generateCommitMessage(status, diff, apiKey string) (string, error) {
 	return strings.TrimSpace(text), nil
 }
 
-func executeGitCommit(message string) error {
-	// log.Info().Msgf("Executing git commit with message: \n\n%s", message)
-	// return nil
+func getGitStatus() (string, error) {
+	cmd := exec.Command("git", "status", "--porcelain")
+	output, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	if strings.Contains(string(output), "nothing to commit") {
+		return "", fmt.Errorf("nothing to commit")
+	}
+	return string(output), nil
+}
 
+func getGitDiff() (string, error) {
+	cmd := exec.Command("git", "--no-pager", "diff")
+	output, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+
+	if len(output) > maxTokens {
+		log.Warn().Msg("Git diff truncated due to length")
+		output = output[:maxTokens]
+		output = append(output, []byte("\n... (truncated)")...)
+	}
+
+	return string(output), nil
+}
+
+func executeGitCommit(message string) error {
 	cmd := exec.Command("git", "commit", "-am", message)
 	output, err := cmd.CombinedOutput()
 	if err != nil {

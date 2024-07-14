@@ -13,6 +13,9 @@ import (
 )
 
 const (
+	antModel         = "claude-3-5-sonnet-20240620"
+	openaiModel      = "gpt-4"
+	maxTokens        = 4000
 	llmClientTimeout = 30 * time.Second
 )
 

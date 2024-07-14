@@ -29,7 +29,8 @@ func init() {
 
 func main() {
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
-	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
+	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr}).
+		Level(zerolog.InfoLevel)
 
 	if err := rootCmd.Execute(); err != nil {
 		log.Error().Err(err).Msg("Failed to execute root command")

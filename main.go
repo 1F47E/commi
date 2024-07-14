@@ -18,17 +18,61 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const systemPrompt = `
+# Commit Message Generator
+
+You are an AI assistant designed to generate high-quality commit messages in the style of a senior software engineer. 
+You will be provided with the output of "git status" and "git diff" for each modified file. 
+Your task is to analyze this information and create a concise, informative, and professional commit message.
+
+## Guidelines for Generating Commit Messages:
+
+1. Start with a brief, descriptive summary (50 characters or less) that captures the essence of the change.
+2. Use the imperative mood in the summary line (e.g., "Add feature" not "Added feature" or "Adds feature").
+3. Provide more detailed explanations in subsequent lines, if necessary, wrapping at 72 characters.
+4. Focus on explaining the "why" behind the changes, not just the "what".
+5. Mention any breaking changes prominently.
+6. Reference relevant issue numbers or ticket IDs if applicable.
+7. Use a consistent style and terminology.
+8. Avoid redundant information that's already in the diff.
+9. Separate the summary from the body with a blank line.
+10. Use bullet points for multiple items in the body.
+
+## Example Structure:
+
+---
+Implement user authentication system
+
+- Add JWT-based authentication middleware
+- Create login and registration endpoints
+- Update user model to include password hashing
+- Integrate with frontend login form
+---
+
+## Additional Considerations:
+
+- If multiple files are changed, try to summarize the overall impact rather than listing each file.
+- If the changes are part of a larger feature or refactoring effort, mention this context.
+- For bug fixes, briefly describe the bug and how the change addresses it.
+- Use technical language appropriate for the codebase, but avoid excessive jargon.
+- If the commit includes both functional changes and code style improvements, prioritize describing the functional changes.
+
+Analyze the provided git status and diff information, and generate a commit message that adheres to these guidelines and reflects the work of a senior engineer.
+`
+
 const (
-	antModel     = "claude-3-5-sonnet-20240620"
-	openaiModel  = "gpt-4o"
-	maxTokens    = 4000
-	systemPrompt = `
-	You are an AI assistant specialized in generating descriptive git commit messages. 
-	Analyze the provided git status and diff, then create a commit message that accurately summarizes the changes. 
-	Focus on the most important modifications and their impact. Keep the message clear and to the point. NO YAPPING.
-	If possible use file path and describe changes in each file or dir. Use multiline style with bullet points. You are allowed to use emoji but not excessive.
-	`
+	antModel    = "claude-3-5-sonnet-20240620"
+	openaiModel = "gpt-4o"
+	maxTokens   = 4000
+	// systemPrompt = `
+	// You are an AI assistant specialized in generating descriptive git commit messages.
+	// Analyze the provided git status and diff, then create a commit message that accurately summarizes the changes.
+	// Focus on the most important modifications and their impact. Keep the message clear and to the point. NO YAPPING.
+	// You are allowed to use emoji but not excessive.
+	// `
 )
+
+// If possible use file path and describe changes in each file or dir. Use multiline style with bullet points. You are allowed to use emoji but not excessive.
 
 var rootCmd = &cobra.Command{
 	Use:   "aicommit",
@@ -46,35 +90,103 @@ func main() {
 	}
 }
 
+func runAICommit(cmd *cobra.Command, args []string) {
+	status, diffs, err := getGitInfo()
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to get git information")
+		os.Exit(1)
+	}
+
+	client, err := getClient()
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to initialize AI client")
+	}
+
+	commitMessage, err := generateCommitMessage(client, status, diffs)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to generate commit message")
+		os.Exit(1)
+	}
+
+	handleUserResponse(cmd, args, commitMessage)
+}
+
+func getClient() (LLMClient, error) {
+	anthropicKey := os.Getenv("ANTHROPIC_API_KEY")
+	if anthropicKey != "" {
+		return NewAnthropicClient(anthropicKey), nil
+	}
+
+	openaiKey := os.Getenv("OPENAI_API_KEY")
+	if openaiKey != "" {
+		return NewOpenAIClient(openaiKey), nil
+	}
+
+	return nil, fmt.Errorf("no API key found for Anthropic or OpenAI")
+}
+
+type LLMClient interface {
+	GenerateCommitMessage(status, diffs string) (string, error)
+}
+
+func generateCommitMessage(client LLMClient, status, diffs string) (string, error) {
+	commitMessage, err := client.GenerateCommitMessage(status, diffs)
+	if err != nil {
+		return "", err
+	}
+
+	// log.Info().Msg("Generated commit message:")
+	// fmt.Println(commitMessage)
+
+	return commitMessage, nil
+}
+
+// ===== TUI
+
+const listHeight = 14
+
+var (
+	titleStyle        = lipgloss.NewStyle().MarginLeft(2)
+	itemStyle         = lipgloss.NewStyle().PaddingLeft(4)
+	selectedItemStyle = lipgloss.NewStyle().PaddingLeft(2).Foreground(lipgloss.Color("170"))
+	paginationStyle   = list.DefaultStyles().PaginationStyle.PaddingLeft(4)
+	helpStyle         = list.DefaultStyles().HelpStyle.PaddingLeft(4).PaddingBottom(1)
+	quitTextStyle     = lipgloss.NewStyle().Margin(1, 0, 2, 4)
+)
+
+type item string
+
+func (i item) FilterValue() string { return "" }
+
+type itemDelegate struct{}
+
+func (d itemDelegate) Height() int                             { return 1 }
+func (d itemDelegate) Spacing() int                            { return 0 }
+func (d itemDelegate) Update(_ tea.Msg, _ *list.Model) tea.Cmd { return nil }
+func (d itemDelegate) Render(w io.Writer, m list.Model, index int, listItem list.Item) {
+	i, ok := listItem.(item)
+	if !ok {
+		return
+	}
+
+	str := fmt.Sprintf("%d. %s", index+1, i)
+
+	fn := itemStyle.Render
+	if index == m.Index() {
+		fn = func(s ...string) string {
+			return selectedItemStyle.Render("> " + strings.Join(s, " "))
+		}
+	}
+
+	fmt.Fprint(w, fn(str))
+}
+
 type model struct {
 	list          list.Model
 	commitMessage string
 	choice        string
+	quitting      bool
 }
-
-func initialModel(commitMessage string) model {
-	items := []list.Item{
-		item{title: "Yes", desc: "Proceed with this commit message"},
-		item{title: "No", desc: "Abort the commit"},
-		item{title: "Redo", desc: "Regenerate the commit message"},
-	}
-
-	l := list.New(items, list.NewDefaultDelegate(), 0, 0)
-	l.Title = "Do you want to proceed with this commit message?"
-
-	return model{
-		list:          l,
-		commitMessage: commitMessage,
-	}
-}
-
-type item struct {
-	title, desc string
-}
-
-func (i item) Title() string       { return i.title }
-func (i item) Description() string { return i.desc }
-func (i item) FilterValue() string { return i.title }
 
 func (m model) Init() tea.Cmd {
 	return nil
@@ -82,17 +194,23 @@ func (m model) Init() tea.Cmd {
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.list.SetWidth(msg.Width)
+		return m, nil
+
 	case tea.KeyMsg:
-		if msg.Type == tea.KeyEnter {
+		switch keypress := msg.String(); keypress {
+		case "q", "ctrl+c":
+			m.quitting = true
+			return m, tea.Quit
+
+		case "enter":
 			i, ok := m.list.SelectedItem().(item)
 			if ok {
-				m.choice = i.title
-				return m, tea.Quit
+				m.choice = string(i)
 			}
+			return m, tea.Quit
 		}
-	case tea.WindowSizeMsg:
-		h, v := lipgloss.NewStyle().Margin(2, 2).GetFrameSize()
-		m.list.SetSize(msg.Width-h, msg.Height-v)
 	}
 
 	var cmd tea.Cmd
@@ -108,69 +226,34 @@ func (m model) View() string {
 	)
 }
 
-func runAICommit(cmd *cobra.Command, args []string) {
-	status, diff, err := getGitInfo()
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to get git information")
-		os.Exit(1)
-	}
-
-	apiKey := getAPIKey()
-	if apiKey == "" {
-		log.Error().Msg("ANTHROPIC_API_KEY environment variable is not set")
-		os.Exit(1)
-	}
-
-	client := NewAnthropicClient(apiKey)
-	commitMessage, err := generateCommitMessage(client, status, diff)
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to generate commit message")
-		os.Exit(1)
-	}
-
-	handleUserResponse(cmd, args, commitMessage)
-}
-
-func getGitInfo() (string, string, error) {
-	status, err := getGitStatus()
-	if err != nil {
-		return "", "", fmt.Errorf("failed to get git status: %w", err)
-	}
-
-	diff, err := getGitDiff()
-	if err != nil {
-		return "", "", fmt.Errorf("failed to get git diff: %w", err)
-	}
-
-	return status, diff, nil
-}
-
-func getAPIKey() string {
-	return os.Getenv("ANTHROPIC_API_KEY")
-}
-
-func generateCommitMessage(client *AnthropicClient, status, diff string) (string, error) {
-	commitMessage, err := client.GenerateCommitMessage(status, diff)
-	if err != nil {
-		return "", err
-	}
-
-	log.Info().Msg("Generated commit message:")
-	fmt.Println(commitMessage)
-
-	return commitMessage, nil
-}
-
 func handleUserResponse(cmd *cobra.Command, args []string, commitMessage string) {
-	p := tea.NewProgram(initialModel(commitMessage))
-	m, err := p.Run()
+	items := []list.Item{
+		item("Yes"),
+		item("No"),
+		item("Redo"),
+	}
+
+	const defaultWidth = 30
+
+	l := list.New(items, itemDelegate{}, defaultWidth, listHeight)
+	l.Title = "Do you want to proceed with this commit message?"
+	l.SetShowStatusBar(false)
+	l.SetFilteringEnabled(false)
+	l.Styles.Title = titleStyle
+	l.Styles.PaginationStyle = paginationStyle
+	l.Styles.HelpStyle = helpStyle
+
+	m := model{list: l, commitMessage: commitMessage}
+
+	p := tea.NewProgram(m)
+	finalModel, err := p.Run()
 	if err != nil {
 		log.Error().Err(err).Msg("Error running Bubble Tea program")
 		os.Exit(1)
 	}
 
-	if m, ok := m.(model); ok {
-		switch m.choice {
+	if finalModel, ok := finalModel.(model); ok {
+		switch finalModel.choice {
 		case "No":
 			log.Info().Msg("Commit aborted.")
 		case "Redo":
@@ -199,8 +282,8 @@ func NewOpenAIClient(apiKey string) *OpenAIClient {
 	}
 }
 
-func (c *OpenAIClient) GenerateCommitMessage(status, diff string) (string, error) {
-	prompt := fmt.Sprintf("Git status:\n\n%s\n\nGit diff:\n\n%s\n\nBased on this information, generate a good and descriptive commit message, fit into 100 tokens max:", status, diff)
+func (c *OpenAIClient) GenerateCommitMessage(status, diffs string) (string, error) {
+	prompt := fmt.Sprintf("Git status:\n\n%s\n\nGit diffs:\n\n%s\n\nBased on this information, generate a good and descriptive commit message, fit into 100 tokens max:", status, diffs)
 
 	requestBody, err := json.Marshal(map[string]interface{}{
 		"model":      openaiModel,
@@ -271,8 +354,8 @@ func NewAnthropicClient(apiKey string) *AnthropicClient {
 	}
 }
 
-func (c *AnthropicClient) GenerateCommitMessage(status, diff string) (string, error) {
-	prompt := fmt.Sprintf("Git status:\n\n%s\n\nGit diff:\n\n%s\n\n", status, diff)
+func (c *AnthropicClient) GenerateCommitMessage(status, diffs string) (string, error) {
+	prompt := fmt.Sprintf("Git status:\n\n%s\n\nGit diffs:\n\n%s\n\n", status, diffs)
 	// Calculate token count for the prompt
 	promptTokens := len(strings.Split(prompt, " ")) * 2
 
@@ -351,6 +434,30 @@ func (c *AnthropicClient) GenerateCommitMessage(status, diff string) (string, er
 	return strings.TrimSpace(text), nil
 }
 
+func getGitInfo() (string, string, error) {
+	status, err := getGitStatus()
+	if err != nil {
+		return "", "", fmt.Errorf("failed to get git status: %w", err)
+	}
+
+	files, err := getChangedFiles(status)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to get changed files: %w", err)
+	}
+
+	diffs := ""
+	for _, file := range files {
+		diff, err := getGitDiff(file)
+		if err != nil {
+			log.Warn().Err(err).Str("file", file).Msg("Failed to get diff for file")
+			continue
+		}
+		diffs += fmt.Sprintf("Diff for %s:\n%s\n\n", file, diff)
+	}
+
+	return status, diffs, nil
+}
+
 func getGitStatus() (string, error) {
 	cmd := exec.Command("git", "status", "--porcelain")
 	output, err := cmd.Output()
@@ -363,13 +470,28 @@ func getGitStatus() (string, error) {
 	return string(output), nil
 }
 
-func getGitDiff() (string, error) {
-	cmd := exec.Command("git", "--no-pager", "diff")
+func getChangedFiles(status string) ([]string, error) {
+	lines := strings.Split(status, "\n")
+	var files []string
+	for _, line := range lines {
+		if line == "" {
+			continue
+		}
+		parts := strings.Fields(line)
+		if len(parts) < 2 {
+			return nil, fmt.Errorf("unexpected git status output format")
+		}
+		files = append(files, parts[1])
+	}
+	return files, nil
+}
+
+func getGitDiff(file string) (string, error) {
+	cmd := exec.Command("git", "--no-pager", "diff", file)
 	output, err := cmd.Output()
 	if err != nil {
 		return "", err
 	}
-
 	return string(output), nil
 }
 

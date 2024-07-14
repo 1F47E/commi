@@ -105,8 +105,7 @@ func handleUserResponse(cmd *cobra.Command, args []string, commit *commit) {
 
 	const defaultWidth = 30
 
-	l := list.New(items, item
-Delegate{}, defaultWidth, listHeight)
+	l := list.New(items, itemDelegate{}, defaultWidth, listHeight)
 	l.Title = "Do you want to proceed with this commit message?"
 	l.SetShowStatusBar(false)
 	l.SetFilteringEnabled(false)

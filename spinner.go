@@ -45,10 +45,11 @@ type model struct {
 	err      error
 	state    string
 	duration time.Duration
+	text     string
 }
 
 func initialModel(s spinner.Model) model {
-	return model{spinner: s, state: "running"}
+	return model{spinner: s, state: "running", text: "Generating commit message..."}
 }
 
 func (m model) Init() tea.Cmd {
@@ -87,6 +88,37 @@ func (m model) View() string {
 	case "done":
 		return fmt.Sprintf("\n\n   Done! Took %.2f seconds\n\n", m.duration.Seconds())
 	default:
-		return fmt.Sprintf("\n\n   %s Generating commit message...\n\n", m.spinner.View())
+		return fmt.Sprintf("\n\n   %s %s\n\n", m.spinner.View(), m.text)
+	}
+}
+
+func updateSpinnerText(p *tea.Program, text string) {
+	p.Send(updateTextMsg(text))
+}
+
+type updateTextMsg string
+
+func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "q", "esc", "ctrl+c":
+			m.quitting = true
+			m.state = "quitting"
+			return m, tea.Quit
+		default:
+			return m, nil
+		}
+	case doneMsg:
+		m.state = "done"
+		m.duration = msg.duration
+		return m, tea.Quit
+	case updateTextMsg:
+		m.text = string(msg)
+		return m, nil
+	default:
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
+		return m, cmd
 	}
 }

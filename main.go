@@ -77,9 +77,7 @@ type commit struct {
 	Message string
 }
 
-type LLMClient interface {
-	GenerateCommitMessage(status, diffs string) (*commit, error)
-}
+// LLMClient interface is defined in clients.go
 
 func generateCommitMessage(client LLMClient, status, diffs string) (*commit, error) {
 	spinner := initializeSpinner()

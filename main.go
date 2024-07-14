@@ -81,11 +81,11 @@ type commit struct {
 
 func generateCommitMessage(client LLMClient, status, diffs string) (*commit, error) {
 	spinner := initializeSpinner()
-	spinnerProgram, spinnerDone := runSpinner(spinner)
+	spinnerProgram, spinnerDone, startTime := runSpinner(spinner)
 
 	commitMessage, err := client.GenerateCommitMessage(status, diffs)
 
-	stopSpinner(spinnerProgram, spinnerDone)
+	stopSpinner(spinnerProgram, spinnerDone, startTime)
 
 	if err != nil {
 		return nil, err

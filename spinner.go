@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
@@ -16,7 +17,8 @@ func initializeSpinner() spinner.Model {
 	return s
 }
 
-func runSpinner(s spinner.Model) (*tea.Program, chan struct{}) {
+func runSpinner(s spinner.Model) (*tea.Program, chan struct{}, time.Time) {
+	startTime := time.Now()
 	p := tea.NewProgram(initialModel(s))
 	spinnerDone := make(chan struct{})
 	go func() {
@@ -25,12 +27,14 @@ func runSpinner(s spinner.Model) (*tea.Program, chan struct{}) {
 		}
 		close(spinnerDone)
 	}()
-	return p, spinnerDone
+	return p, spinnerDone, startTime
 }
 
-func stopSpinner(p *tea.Program, spinnerDone chan struct{}) {
+func stopSpinner(p *tea.Program, spinnerDone chan struct{}, startTime time.Time) {
 	p.Quit()
 	<-spinnerDone
+	duration := time.Since(startTime)
+	fmt.Printf("\n\n   Done! Took %.2f seconds\n\n", duration.Seconds())
 }
 
 type model struct {

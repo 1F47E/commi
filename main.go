@@ -86,8 +86,11 @@ type commit struct {
 // LLMClient interface is defined in clients.go
 
 func generateCommitMessage(client LLMClient, status, diffs string) (*commit, error) {
+	modelName := getModelName(client)
 	spinner := initializeSpinner()
 	spinnerProgram, spinnerDone, startTime := runSpinner(spinner)
+
+	updateSpinnerText(spinnerProgram, fmt.Sprintf("Generating commit message using %s...", modelName))
 
 	commitMessage, err := client.GenerateCommitMessage(status, diffs)
 
@@ -98,4 +101,15 @@ func generateCommitMessage(client LLMClient, status, diffs string) (*commit, err
 	}
 
 	return commitMessage, nil
+}
+
+func getModelName(client LLMClient) string {
+	switch client.(type) {
+	case *AnthropicClient:
+		return "Anthropic Claude"
+	case *OpenAIClient:
+		return "OpenAI GPT-4"
+	default:
+		return "Unknown Model"
+	}
 }

@@ -89,7 +89,7 @@ func (c *OpenAIClient) GenerateCommitMessage(status, diffs string) (*commit, err
 
 	content := strings.TrimSpace(response.Choices[0].Message.Content)
 	lines := strings.SplitN(content, "\n", 2)
-	
+
 	if len(lines) < 2 {
 		return nil, fmt.Errorf("invalid commit message format")
 	}

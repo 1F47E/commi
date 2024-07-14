@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/rs/zerolog/log"
 )
@@ -148,7 +149,9 @@ func (c *AnthropicClient) GenerateCommitMessage(status, diffs string) (*commit, 
 	req.Header.Set("x-api-key", c.apiKey)
 	req.Header.Set("anthropic-version", "2023-06-01")
 
-	client := &http.Client{}
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to send request: %v", err)
@@ -163,6 +166,7 @@ func (c *AnthropicClient) GenerateCommitMessage(status, diffs string) (*commit, 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("API request failed with status code %d: %s", resp.StatusCode, string(body))
 	}
+	log.Debug().Msgf("Response body:\n%s", string(body))
 
 	var result map[string]interface{}
 	if err := json.Unmarshal(body, &result); err != nil {
@@ -184,10 +188,13 @@ func (c *AnthropicClient) GenerateCommitMessage(status, diffs string) (*commit, 
 		return nil, fmt.Errorf("text not found in response")
 	}
 
+	log.Debug().Msgf("Response text:\n%s", text)
+
 	var commitData commit
 	if err := json.Unmarshal([]byte(text), &commitData); err != nil {
 		return nil, fmt.Errorf("failed to parse commit data: %v", err)
 	}
+	log.Debug().Msgf("Commit data:\n%v", commitData)
 
 	return &commitData, nil
 }

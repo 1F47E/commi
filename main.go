@@ -560,6 +560,9 @@ func getGitStatus() (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if len(output) == 0 {
+		return "", fmt.Errorf("nothing to commit")
+	}
 	if strings.Contains(string(output), "nothing to commit") {
 		return "", fmt.Errorf("nothing to commit")
 	}

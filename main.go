@@ -11,13 +11,16 @@ import (
 
 // ===== CONSTANTS
 
+// version is set during build
+var version string
 
 // ===== ROOT COMMAND
 
 var rootCmd = &cobra.Command{
-	Use:   "aicommit",
-	Short: "Generate and apply AI-powered commit messages",
-	Run:   runAICommit,
+	Use:     "aicommit",
+	Short:   "Generate and apply AI-powered commit messages",
+	Run:     runAICommit,
+	Version: version,
 }
 
 func main() {

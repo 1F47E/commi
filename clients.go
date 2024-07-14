@@ -12,6 +12,10 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+const (
+	llmClientTimeout = 30 * time.Second
+)
+
 type LLMClient interface {
 	GenerateCommitMessage(status, diffs string) (*commit, error)
 }
@@ -59,7 +63,9 @@ func (c *OpenAIClient) GenerateCommitMessage(status, diffs string) (*commit, err
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 
-	client := &http.Client{}
+	client := &http.Client{
+		Timeout: llmClientTimeout,
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to send request: %v", err)
@@ -154,7 +160,7 @@ func (c *AnthropicClient) GenerateCommitMessage(status, diffs string) (*commit, 
 	req.Header.Set("anthropic-version", "2023-06-01")
 
 	client := &http.Client{
-		Timeout: 30 * time.Second,
+		Timeout: llmClientTimeout,
 	}
 	resp, err := client.Do(req)
 	if err != nil {

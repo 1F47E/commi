@@ -11,11 +11,6 @@ import (
 
 // ===== CONSTANTS
 
-const (
-	antModel    = "claude-3-5-sonnet-20240620"
-	openaiModel = "gpt-4"
-	maxTokens   = 4000
-)
 
 // ===== ROOT COMMAND
 

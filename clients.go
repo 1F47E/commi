@@ -16,6 +16,21 @@ const (
 	llmClientTimeout = 30 * time.Second
 )
 
+func truncatePrompt(prompt string, maxTokens int) string {
+	promptTokens := len(strings.Split(prompt, " ")) * 2
+
+	log.Debug().Msgf("Prompt tokens: %d", promptTokens)
+	if promptTokens > maxTokens {
+		words := strings.Split(prompt, " ")
+		truncatedWords := words[:maxTokens/2]
+		prompt = strings.Join(truncatedWords, " ")
+		prompt += "..."
+		log.Warn().Msgf("Truncating prompt to %d tokens", maxTokens)
+	}
+
+	return prompt
+}
+
 type LLMClient interface {
 	GenerateCommitMessage(status, diffs string) (*commit, error)
 }
@@ -36,6 +51,7 @@ func NewOpenAIClient(apiKey string) *OpenAIClient {
 
 func (c *OpenAIClient) GenerateCommitMessage(status, diffs string) (*commit, error) {
 	prompt := fmt.Sprintf("Git status:\n\n%s\n\nGit diffs:\n\n%s\n\nBased on this information, generate a good and descriptive commit message:", status, diffs)
+	prompt = truncatePrompt(prompt, maxTokens)
 
 	requestBody, err := json.Marshal(map[string]interface{}{
 		"model":      openaiModel,
@@ -122,16 +138,7 @@ func NewAnthropicClient(apiKey string) *AnthropicClient {
 
 func (c *AnthropicClient) GenerateCommitMessage(status, diffs string) (*commit, error) {
 	prompt := fmt.Sprintf("Git status:\n\n%s\n\nGit diffs:\n\n%s\n\n", status, diffs)
-	promptTokens := len(strings.Split(prompt, " ")) * 2
-
-	log.Debug().Msgf("Prompt tokens: %d", promptTokens)
-	if promptTokens > maxTokens {
-		words := strings.Split(prompt, " ")
-		truncatedWords := words[:maxTokens/2]
-		prompt = strings.Join(truncatedWords, " ")
-		prompt += "..."
-		log.Warn().Msgf("Truncating prompt to %d tokens", maxTokens)
-	}
+	prompt = truncatePrompt(prompt, maxTokens)
 
 	requestBody, err := json.Marshal(map[string]interface{}{
 		"model":      antModel,

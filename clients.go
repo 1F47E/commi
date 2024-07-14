@@ -88,12 +88,16 @@ func (c *OpenAIClient) GenerateCommitMessage(status, diffs string) (*commit, err
 	}
 
 	content := strings.TrimSpace(response.Choices[0].Message.Content)
-	var commitMessage commit
-	if err := json.Unmarshal([]byte(content), &commitMessage); err != nil {
-		return nil, fmt.Errorf("failed to parse commit message: %v", err)
+	lines := strings.SplitN(content, "\n", 2)
+	
+	if len(lines) < 2 {
+		return nil, fmt.Errorf("invalid commit message format")
 	}
 
-	return &commitMessage, nil
+	return &commit{
+		Title:   strings.TrimSpace(lines[0]),
+		Message: strings.TrimSpace(lines[1]),
+	}, nil
 }
 
 // Anthropic Client
@@ -168,33 +172,32 @@ func (c *AnthropicClient) GenerateCommitMessage(status, diffs string) (*commit, 
 	}
 	log.Debug().Msgf("Response body:\n%s", string(body))
 
-	var result map[string]interface{}
+	var result struct {
+		Content []struct {
+			Text string `json:"text"`
+		} `json:"content"`
+	}
 	if err := json.Unmarshal(body, &result); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal response: %v", err)
 	}
 
-	content, ok := result["content"].([]interface{})
-	if !ok || len(content) == 0 {
+	if len(result.Content) == 0 {
 		return nil, fmt.Errorf("unexpected response format")
 	}
 
-	firstContent, ok := content[0].(map[string]interface{})
-	if !ok {
-		return nil, fmt.Errorf("unexpected content format")
-	}
-
-	text, ok := firstContent["text"].(string)
-	if !ok {
-		return nil, fmt.Errorf("text not found in response")
-	}
-
+	text := result.Content[0].Text
 	log.Debug().Msgf("Response text:\n%s", text)
 
-	var commitData commit
-	if err := json.Unmarshal([]byte(text), &commitData); err != nil {
-		return nil, fmt.Errorf("failed to parse commit data: %v", err)
+	lines := strings.SplitN(text, "\n", 2)
+	if len(lines) < 2 {
+		return nil, fmt.Errorf("invalid commit message format")
+	}
+
+	commitData := &commit{
+		Title:   strings.TrimSpace(lines[0]),
+		Message: strings.TrimSpace(lines[1]),
 	}
 	log.Debug().Msgf("Commit data:\n%v", commitData)
 
-	return &commitData, nil
+	return commitData, nil
 }

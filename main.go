@@ -23,6 +23,10 @@ var rootCmd = &cobra.Command{
 	Version: version,
 }
 
+func init() {
+	rootCmd.Flags().BoolP("version", "v", false, "Display version information")
+}
+
 func main() {
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
@@ -36,6 +40,10 @@ func main() {
 // ===== AI COMMIT GENERATION
 
 func runAICommit(cmd *cobra.Command, args []string) {
+	if versionFlag, _ := cmd.Flags().GetBool("version"); versionFlag {
+		fmt.Println(version)
+		return
+	}
 	status, diffs, err := getGitInfo()
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to get git information")

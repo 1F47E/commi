@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -11,9 +10,24 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/list"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
+)
+
+const (
+	antModel     = "claude-3-5-sonnet-20240620"
+	openaiModel  = "gpt-4o"
+	maxTokens    = 4000
+	systemPrompt = `
+	You are an AI assistant specialized in generating descriptive git commit messages. 
+	Analyze the provided git status and diff, then create a commit message that accurately summarizes the changes. 
+	Focus on the most important modifications and their impact. Keep the message clear and to the point. NO YAPPING.
+	If possible use file path and describe changes in each file or dir. Use multiline style with bullet points. You are allowed to use emoji but not excessive.
+	`
 )
 
 var rootCmd = &cobra.Command{
@@ -31,6 +45,69 @@ func main() {
 		os.Exit(1)
 	}
 }
+
+type model struct {
+	list          list.Model
+	commitMessage string
+	choice        string
+}
+
+func initialModel(commitMessage string) model {
+	items := []list.Item{
+		item{title: "Yes", desc: "Proceed with this commit message"},
+		item{title: "No", desc: "Abort the commit"},
+		item{title: "Redo", desc: "Regenerate the commit message"},
+	}
+
+	l := list.New(items, list.NewDefaultDelegate(), 0, 0)
+	l.Title = "Do you want to proceed with this commit message?"
+
+	return model{
+		list:          l,
+		commitMessage: commitMessage,
+	}
+}
+
+type item struct {
+	title, desc string
+}
+
+func (i item) Title() string       { return i.title }
+func (i item) Description() string { return i.desc }
+func (i item) FilterValue() string { return i.title }
+
+func (m model) Init() tea.Cmd {
+	return nil
+}
+
+func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		if msg.Type == tea.KeyEnter {
+			i, ok := m.list.SelectedItem().(item)
+			if ok {
+				m.choice = i.title
+				return m, tea.Quit
+			}
+		}
+	case tea.WindowSizeMsg:
+		h, v := lipgloss.NewStyle().Margin(2, 2).GetFrameSize()
+		m.list.SetSize(msg.Width-h, msg.Height-v)
+	}
+
+	var cmd tea.Cmd
+	m.list, cmd = m.list.Update(msg)
+	return m, cmd
+}
+
+func (m model) View() string {
+	return fmt.Sprintf(
+		"Commit Message:\n\n%s\n\n%s",
+		m.commitMessage,
+		m.list.View(),
+	)
+}
+
 func runAICommit(cmd *cobra.Command, args []string) {
 	status, diff, err := getGitInfo()
 	if err != nil {
@@ -85,36 +162,102 @@ func generateCommitMessage(client *AnthropicClient, status, diff string) (string
 }
 
 func handleUserResponse(cmd *cobra.Command, args []string, commitMessage string) {
-	fmt.Print("\n\nDo you want to proceed with this commit message? (y/n/redo, default: y): ")
-	reader := bufio.NewReader(os.Stdin)
-	response, _ := reader.ReadString('\n')
-	response = strings.TrimSpace(strings.ToLower(response))
+	p := tea.NewProgram(initialModel(commitMessage))
+	m, err := p.Run()
+	if err != nil {
+		log.Error().Err(err).Msg("Error running Bubble Tea program")
+		os.Exit(1)
+	}
 
-	switch response {
-	case "n":
-		log.Info().Msg("Commit aborted.")
-	case "redo":
-		log.Info().Msg("Regenerating commit message...")
-		runAICommit(cmd, args)
-	default:
-		err := executeGitCommit(commitMessage)
-		if err != nil {
-			log.Error().Err(err).Msg("Failed to execute git commit")
-			os.Exit(1)
+	if m, ok := m.(model); ok {
+		switch m.choice {
+		case "No":
+			log.Info().Msg("Commit aborted.")
+		case "Redo":
+			log.Info().Msg("Regenerating commit message...")
+			runAICommit(cmd, args)
+		case "Yes":
+			err := executeGitCommit(commitMessage)
+			if err != nil {
+				log.Error().Err(err).Msg("Failed to execute git commit")
+				os.Exit(1)
+			}
+			log.Info().Msg("Commit successfully created!")
 		}
-		log.Info().Msg("Commit successfully created!")
 	}
 }
 
-const (
-	modelVersion = "claude-3-5-sonnet-20240620"
-	maxTokens    = 3000
-	systemPrompt = `
-	You are an AI assistant specialized in generating descriptive git commit messages. 
-	Analyze the provided git status and diff, then create a commit message that accurately summarizes the changes. 
-	Focus on the most important modifications and their impact. Keep the message clear and to the point. NO YAPPING.
-	`
-)
+type OpenAIClient struct {
+	apiKey string
+	url    string
+}
+
+func NewOpenAIClient(apiKey string) *OpenAIClient {
+	return &OpenAIClient{
+		apiKey: apiKey,
+		url:    "https://api.openai.com/v1/chat/completions",
+	}
+}
+
+func (c *OpenAIClient) GenerateCommitMessage(status, diff string) (string, error) {
+	prompt := fmt.Sprintf("Git status:\n\n%s\n\nGit diff:\n\n%s\n\nBased on this information, generate a good and descriptive commit message, fit into 100 tokens max:", status, diff)
+
+	requestBody, err := json.Marshal(map[string]interface{}{
+		"model":      openaiModel,
+		"max_tokens": maxTokens,
+		"messages": []map[string]string{
+			{
+				"role":    "system",
+				"content": systemPrompt,
+			},
+			{
+				"role":    "user",
+				"content": prompt,
+			},
+		},
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal request body: %v", err)
+	}
+
+	req, err := http.NewRequest("POST", c.url, bytes.NewBuffer(requestBody))
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %v", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+c.apiKey)
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to send request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read response body: %v", err)
+	}
+
+	var response struct {
+		Choices []struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+		} `json:"choices"`
+	}
+
+	if err := json.Unmarshal(body, &response); err != nil {
+		return "", fmt.Errorf("failed to unmarshal response: %v", err)
+	}
+
+	if len(response.Choices) == 0 {
+		return "", fmt.Errorf("no choices in response")
+	}
+
+	return strings.TrimSpace(response.Choices[0].Message.Content), nil
+}
 
 type AnthropicClient struct {
 	apiKey string
@@ -129,11 +272,23 @@ func NewAnthropicClient(apiKey string) *AnthropicClient {
 }
 
 func (c *AnthropicClient) GenerateCommitMessage(status, diff string) (string, error) {
-	prompt := fmt.Sprintf("Git status:\n\n%s\n\nGit diff:\n\n%s\n\nBased on this information, generate a good and descriptive commit message, fit into 100 tokens max:", status, diff)
+	prompt := fmt.Sprintf("Git status:\n\n%s\n\nGit diff:\n\n%s\n\n", status, diff)
+	// Calculate token count for the prompt
+	promptTokens := len(strings.Split(prompt, " ")) * 2
+
+	log.Info().Msgf("Prompt tokens: %d", promptTokens)
+	// Truncate the prompt if it exceeds maxTokens
+	if promptTokens > maxTokens {
+		words := strings.Split(prompt, " ")
+		truncatedWords := words[:maxTokens/2]
+		prompt = strings.Join(truncatedWords, " ")
+		prompt += "..."
+		log.Info().Msgf("Truncated prompt len: %d", len(prompt))
+	}
 
 	requestBody, err := json.Marshal(map[string]interface{}{
-		"model":      modelVersion,
-		"max_tokens": 300,
+		"model":      antModel,
+		"max_tokens": maxTokens,
 		"messages": []map[string]interface{}{
 			{
 				"role": "user",
@@ -213,12 +368,6 @@ func getGitDiff() (string, error) {
 	output, err := cmd.Output()
 	if err != nil {
 		return "", err
-	}
-
-	if len(output) > maxTokens {
-		log.Warn().Msg("Git diff truncated due to length")
-		output = output[:maxTokens]
-		output = append(output, []byte("\n... (truncated)")...)
 	}
 
 	return string(output), nil

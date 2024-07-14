@@ -31,10 +31,12 @@ func runSpinner(s spinner.Model) (*tea.Program, chan struct{}, time.Time) {
 }
 
 func stopSpinner(p *tea.Program, spinnerDone chan struct{}, startTime time.Time) {
-	p.Quit()
+	p.Send(doneMsg{duration: time.Since(startTime)})
 	<-spinnerDone
-	duration := time.Since(startTime)
-	fmt.Printf("\n\n   Done! Took %.2f seconds\n\n", duration.Seconds())
+}
+
+type doneMsg struct {
+	duration time.Duration
 }
 
 type model struct {
@@ -42,6 +44,7 @@ type model struct {
 	quitting bool
 	err      error
 	state    string
+	duration time.Duration
 }
 
 func initialModel(s spinner.Model) model {
@@ -63,6 +66,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		default:
 			return m, nil
 		}
+	case doneMsg:
+		m.state = "done"
+		m.duration = msg.duration
+		return m, tea.Quit
 	default:
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
@@ -74,8 +81,12 @@ func (m model) View() string {
 	if m.err != nil {
 		return m.err.Error()
 	}
-	if m.state == "quitting" {
+	switch m.state {
+	case "quitting":
 		return "\n"
+	case "done":
+		return fmt.Sprintf("\n\n   Done! Took %.2f seconds\n\n", m.duration.Seconds())
+	default:
+		return fmt.Sprintf("\n\n   %s Generating commit message...\n\n", m.spinner.View())
 	}
-	return fmt.Sprintf("\n\n   %s Generating commit message...\n\n", m.spinner.View())
 }

@@ -71,6 +71,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.state = "done"
 		m.duration = msg.duration
 		return m, tea.Quit
+	case updateTextMsg:
+		m.text = string(msg)
+		return m, nil
 	default:
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
@@ -97,28 +100,3 @@ func updateSpinnerText(p *tea.Program, text string) {
 }
 
 type updateTextMsg string
-
-func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		switch msg.String() {
-		case "q", "esc", "ctrl+c":
-			m.quitting = true
-			m.state = "quitting"
-			return m, tea.Quit
-		default:
-			return m, nil
-		}
-	case doneMsg:
-		m.state = "done"
-		m.duration = msg.duration
-		return m, tea.Quit
-	case updateTextMsg:
-		m.text = string(msg)
-		return m, nil
-	default:
-		var cmd tea.Cmd
-		m.spinner, cmd = m.spinner.Update(msg)
-		return m, cmd
-	}
-}

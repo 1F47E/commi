@@ -25,9 +25,21 @@ var (
 	quitTextStyle     = lipgloss.NewStyle().Margin(1, 0, 2, 4)
 )
 
-type item string
+type MenuAction int
 
-func (i item) FilterValue() string { return "" }
+const (
+	CommitThis MenuAction = iota
+	CopyToClipboard
+	Regenerate
+	Cancel
+)
+
+type item struct {
+	title string
+	action MenuAction
+}
+
+func (i item) FilterValue() string { return i.title }
 
 type itemDelegate struct{}
 
@@ -40,7 +52,7 @@ func (d itemDelegate) Render(w io.Writer, m list.Model, index int, listItem list
 		return
 	}
 
-	str := string(i)
+	str := i.title
 
 	fn := itemStyle.Render
 	if index == m.Index() {
@@ -55,7 +67,7 @@ func (d itemDelegate) Render(w io.Writer, m list.Model, index int, listItem list
 type model struct {
 	list     list.Model
 	commit   *commit
-	choice   string
+	choice   MenuAction
 	quitting bool
 }
 
@@ -83,7 +95,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "enter":
 			i, ok := m.list.SelectedItem().(item)
 			if ok {
-				m.choice = string(i)
+				m.choice = i.action
 			}
 			return m, tea.Quit
 		}
@@ -109,10 +121,10 @@ func renderCommitMessage(commit *commit) string {
 
 func handleUserResponse(cmd *cobra.Command, args []string, commit *commit) {
 	items := []list.Item{
-		item("✅ Commit this"),
-		item("📋 Copy to clipboard and exit"),
-		item("🔄 Regenerate"),
-		item("❌ Cancel"),
+		item{title: "✅ Commit this", action: CommitThis},
+		item{title: "📋 Copy to clipboard and exit", action: CopyToClipboard},
+		item{title: "🔄 Regenerate", action: Regenerate},
+		item{title: "❌ Cancel", action: Cancel},
 	}
 
 	const defaultWidth = 30
@@ -137,7 +149,7 @@ func handleUserResponse(cmd *cobra.Command, args []string, commit *commit) {
 
 	if finalModel, ok := finalModel.(model); ok {
 		switch finalModel.choice {
-		case "Commit this":
+		case CommitThis:
 			if err := executeGitAdd(); err != nil {
 				log.Error().Err(err).Msg("Failed to execute git add")
 				return
@@ -147,7 +159,7 @@ func handleUserResponse(cmd *cobra.Command, args []string, commit *commit) {
 				return
 			}
 			log.Info().Msg("Commit successfully created!")
-		case "📋 Copy to clipboard and exit":
+		case CopyToClipboard:
 			content := fmt.Sprintf("%s\n\n%s", commit.Title, commit.Message)
 			log.Debug().Msg(fmt.Sprintf("Attempting to copy to clipboard: %s", content))
 			if err := copyToClipboard(content); err != nil {
@@ -156,9 +168,9 @@ func handleUserResponse(cmd *cobra.Command, args []string, commit *commit) {
 				log.Info().Msg("Commit message copied to clipboard.")
 			}
 			log.Debug().Msg("Clipboard operation completed")
-		case "Regenerate":
+		case Regenerate:
 			runAICommit(cmd, args)
-		case "Cancel":
+		case Cancel:
 			log.Info().Msg("Commit aborted.")
 		}
 	}

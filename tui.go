@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/atotto/clipboard"
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -162,8 +163,9 @@ func handleUserResponse(cmd *cobra.Command, args []string, commit *commit) {
 }
 
 func copyToClipboard(content string) error {
-	// Implementation of copyToClipboard function
-	// This will depend on the clipboard library you choose to use
-	// For example, you might use github.com/atotto/clipboard
-	return nil // Replace with actual implementation
+	err := clipboard.WriteAll(content)
+	if err != nil {
+		return fmt.Errorf("failed to copy to clipboard: %v", err)
+	}
+	return nil
 }

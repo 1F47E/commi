@@ -56,10 +56,10 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case tea.WindowSizeMsg:
 		h, v := docStyle.GetFrameSize()
-		m.list.SetSize(msg.Width-h, msg.Height/3-v)
+		m.list.SetSize(msg.Width-h, msg.Height/2-v)
 		
 		m.viewport.Width = msg.Width - h
-		m.viewport.Height = msg.Height - m.list.Height() - v - 1
+		m.viewport.Height = msg.Height/2 - v
 		
 		if m.commit != nil {
 			m.viewport.SetContent(renderCommitMessage(m.commit))
@@ -77,11 +77,11 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m tuiModel) View() string {
-	return fmt.Sprintf(
-		"%s\n\n%s",
+	return docStyle.Render(fmt.Sprintf(
+		"%s\n%s",
 		m.viewport.View(),
 		m.list.View(),
-	)
+	))
 }
 
 func renderCommitMessage(commit *commit) string {
@@ -97,7 +97,7 @@ func handleUserResponse(cmd *cobra.Command, args []string, commit *commit) {
 	}
 
 	l := list.New(items, list.NewDefaultDelegate(), 0, 0)
-	l.Title = "Do you want to proceed with this commit message?"
+	l.Title = "Options"
 	l.SetShowStatusBar(false)
 	l.SetFilteringEnabled(false)
 

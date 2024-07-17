@@ -120,19 +120,32 @@ func handleUserResponse(cmd *cobra.Command, args []string, commit *commit) {
 	}
 }
 
+type previewModel struct {
+	viewport viewport.Model
+}
+
+func (m previewModel) Init() tea.Cmd {
+	return nil
+}
+
+func (m previewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
+	m.viewport, cmd = m.viewport.Update(msg)
+	return m, cmd
+}
+
+func (m previewModel) View() string {
+	return m.viewport.View()
+}
+
 func previewCommitMessage(commit *commit) {
 	content := renderCommitMessage(commit)
 	vp := viewport.New(80, 20)
 	vp.SetContent(content)
 
-	m := struct {
-		viewport viewport.Model
-	}{viewport: vp}
+	m := previewModel{viewport: vp}
 
-	p := tea.NewProgram(
-		m,
-		tea.WithAltScreen(),
-	)
+	p := tea.NewProgram(m, tea.WithAltScreen())
 
 	if _, err := p.Run(); err != nil {
 		log.Error().Err(err).Msg("Error running preview")

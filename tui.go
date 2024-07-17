@@ -33,7 +33,6 @@ func (i item) FilterValue() string { return i.title }
 type model struct {
 	list     list.Model
 	commit   *commit
-	choice   string
 	quitting bool
 }
 

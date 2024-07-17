@@ -14,6 +14,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
+type commit struct {
+	Title   string
+	Message string
+}
+
 const listHeight = 14
 
 var (

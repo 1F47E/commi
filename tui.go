@@ -13,9 +13,9 @@ import (
 )
 
 var (
-	docStyle    = lipgloss.NewStyle().Margin(1, 2)
-	titleStyle  = lipgloss.NewStyle().Bold(true)
-	listStyle   = lipgloss.NewStyle().Margin(1, 0, 0, 2)
+	docStyle      = lipgloss.NewStyle().Margin(1, 2)
+	titleStyle    = lipgloss.NewStyle().Bold(true)
+	menuStyle     = lipgloss.NewStyle().Margin(1, 0, 0, 2)
 	selectedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
 )
 
@@ -24,13 +24,18 @@ type commit struct {
 	Message string
 }
 
-type menuItem string
+type menuItem struct {
+	title string
+	description string
+}
 
-func (i menuItem) FilterValue() string { return string(i) }
+func (i menuItem) Title() string       { return i.title }
+func (i menuItem) Description() string { return i.description }
+func (i menuItem) FilterValue() string { return i.title }
 
 type tuiModel struct {
 	viewport viewport.Model
-	list     list.Model
+	menu     list.Model
 	commit   *commit
 	choice   string
 	quitting bool
@@ -52,9 +57,9 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.quitting = true
 			return m, tea.Quit
 		case "enter":
-			i, ok := m.list.SelectedItem().(menuItem)
+			i, ok := m.menu.SelectedItem().(menuItem)
 			if ok {
-				m.choice = string(i)
+				m.choice = i.title
 			}
 			return m, tea.Quit
 		}
@@ -62,9 +67,9 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width, m.height = msg.Width, msg.Height
 		h, v := docStyle.GetFrameSize()
 		m.viewport.Width = msg.Width - h
-		m.viewport.Height = msg.Height - v - 6 // Reserve space for the list
-		m.list.SetWidth(msg.Width - h)
-		m.list.SetHeight(5) // Fixed height for the list
+		m.viewport.Height = msg.Height - v - 10 // Reserve more space for the menu
+		m.menu.SetWidth(msg.Width - h)
+		m.menu.SetHeight(6) // Increased height for the menu
 		
 		if m.commit != nil {
 			m.viewport.SetContent(renderCommitMessage(m.commit))
@@ -75,7 +80,7 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.viewport, cmd = m.viewport.Update(msg)
 	cmds = append(cmds, cmd)
 
-	m.list, cmd = m.list.Update(msg)
+	m.menu, cmd = m.menu.Update(msg)
 	cmds = append(cmds, cmd)
 
 	return m, tea.Batch(cmds...)
@@ -85,7 +90,7 @@ func (m tuiModel) View() string {
 	return docStyle.Render(fmt.Sprintf(
 		"%s\n%s",
 		m.viewport.View(),
-		listStyle.Render(m.list.View()),
+		menuStyle.Render(m.menu.View()),
 	))
 }
 
@@ -95,30 +100,30 @@ func renderCommitMessage(commit *commit) string {
 
 func handleUserResponse(cmd *cobra.Command, args []string, commit *commit) {
 	items := []list.Item{
-		menuItem("✅ Commit this message"),
-		menuItem("🔄 Generate another one"),
-		menuItem("📋 Copy to clipboard & exit"),
-		menuItem("❌ Cancel"),
+		menuItem{title: "✅ Commit this message", description: "Apply the generated commit message"},
+		menuItem{title: "🔄 Generate another one", description: "Create a new commit message"},
+		menuItem{title: "📋 Copy to clipboard & exit", description: "Copy the message and close"},
+		menuItem{title: "❌ Cancel", description: "Abort the commit process"},
 	}
 
 	delegate := list.NewDefaultDelegate()
 	delegate.Styles.SelectedTitle = selectedStyle
 	delegate.Styles.SelectedDesc = selectedStyle
 
-	l := list.New(items, delegate, 0, 0)
-	l.Title = "Options"
-	l.SetShowStatusBar(false)
-	l.SetFilteringEnabled(false)
+	m := list.New(items, delegate, 0, 0)
+	m.SetShowTitle(false)
+	m.SetShowStatusBar(false)
+	m.SetFilteringEnabled(false)
 
-	m := tuiModel{
-		list:     l,
+	model := tuiModel{
+		menu:     m,
 		commit:   commit,
 		viewport: viewport.New(0, 0),
 	}
 
-	m.viewport.SetContent(renderCommitMessage(commit))
+	model.viewport.SetContent(renderCommitMessage(commit))
 
-	p := tea.NewProgram(m, tea.WithAltScreen())
+	p := tea.NewProgram(model, tea.WithAltScreen())
 
 	finalModel, err := p.Run()
 	if err != nil {

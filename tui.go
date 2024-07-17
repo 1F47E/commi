@@ -147,13 +147,15 @@ func handleUserResponse(cmd *cobra.Command, args []string, commit *commit) {
 				return
 			}
 			log.Info().Msg("Commit successfully created!")
-		case "Copy to clipboard and exit":
+		case "📋 Copy to clipboard and exit":
 			content := fmt.Sprintf("%s\n\n%s", commit.Title, commit.Message)
+			log.Debug().Msg(fmt.Sprintf("Attempting to copy to clipboard: %s", content))
 			if err := copyToClipboard(content); err != nil {
 				log.Error().Err(err).Msg("Failed to copy to clipboard")
 			} else {
 				log.Info().Msg("Commit message copied to clipboard.")
 			}
+			log.Debug().Msg("Clipboard operation completed")
 		case "Regenerate":
 			runAICommit(cmd, args)
 		case "Cancel":
@@ -163,9 +165,12 @@ func handleUserResponse(cmd *cobra.Command, args []string, commit *commit) {
 }
 
 func copyToClipboard(content string) error {
+	log.Debug().Msg("Entering copyToClipboard function")
 	err := clipboard.WriteAll(content)
 	if err != nil {
+		log.Error().Err(err).Msg("clipboard.WriteAll failed")
 		return fmt.Errorf("failed to copy to clipboard: %v", err)
 	}
+	log.Debug().Msg("Successfully wrote to clipboard")
 	return nil
 }

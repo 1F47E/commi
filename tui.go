@@ -3,9 +3,9 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/list"
-	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/rs/zerolog/log"
@@ -13,8 +13,9 @@ import (
 )
 
 var (
-	docStyle   = lipgloss.NewStyle().Margin(1, 2)
-	titleStyle = lipgloss.NewStyle().Bold(true)
+	docStyle    = lipgloss.NewStyle().Margin(1, 2)
+	titleStyle  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FF6347"))
+	messageStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#4682B4"))
 )
 
 type commit struct {
@@ -22,13 +23,9 @@ type commit struct {
 	Message string
 }
 
-type item struct {
-	title, desc string
-}
+type item string
 
-func (i item) Title() string       { return i.title }
-func (i item) Description() string { return i.desc }
-func (i item) FilterValue() string { return i.title }
+func (i item) FilterValue() string { return string(i) }
 
 type model struct {
 	list     list.Model
@@ -43,13 +40,17 @@ func (m model) Init() tea.Cmd {
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		if msg.String() == "ctrl+c" {
+		switch msg.String() {
+		case "ctrl+c", "q":
 			m.quitting = true
 			return m, tea.Quit
+		case "enter":
+			i := m.list.SelectedItem()
+			return m, m.choose(i.(item))
 		}
 	case tea.WindowSizeMsg:
 		h, v := docStyle.GetFrameSize()
-		m.list.SetSize(msg.Width-h, msg.Height-v)
+		m.list.SetSize(msg.Width-h, msg.Height-v-6) // Adjust for commit message display
 	}
 
 	var cmd tea.Cmd
@@ -58,20 +59,57 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) View() string {
-	return docStyle.Render(m.list.View())
+	if m.quitting {
+		return ""
+	}
+
+	commitMessage := renderCommitMessage(m.commit)
+	return docStyle.Render(fmt.Sprintf("%s\n\n%s", commitMessage, m.list.View()))
+}
+
+func (m model) choose(choice item) tea.Cmd {
+	return func() tea.Msg {
+		switch choice {
+		case "❌ Cancel":
+			log.Info().Msg("Commit aborted.")
+			return tea.Quit()
+		case "🔄 Generate another one":
+			log.Info().Msg("Regenerating commit message...")
+			return tea.Quit()
+		case "✅ Commit this message":
+			if err := executeGitAdd(); err != nil {
+				log.Error().Err(err).Msg("Failed to execute git add")
+				return tea.Quit()
+			}
+			if err := executeGitCommit(m.commit.Title, m.commit.Message); err != nil {
+				log.Error().Err(err).Msg("Failed to execute git commit")
+				return tea.Quit()
+			}
+			log.Info().Msg("Commit successfully created!")
+			return tea.Quit()
+		case "📋 Copy to clipboard & exit":
+			content := fmt.Sprintf("%s\n\n%s", m.commit.Title, m.commit.Message)
+			if err := copyToClipboard(content); err != nil {
+				log.Error().Err(err).Msg("Failed to copy to clipboard")
+			} else {
+				log.Info().Msg("Commit message copied to clipboard.")
+			}
+			return tea.Quit()
+		}
+		return nil
+	}
 }
 
 func renderCommitMessage(commit *commit) string {
-	return fmt.Sprintf("%s\n\n%s", titleStyle.Render(commit.Title), commit.Message)
+	return fmt.Sprintf("%s\n\n%s", titleStyle.Render(commit.Title), messageStyle.Render(commit.Message))
 }
 
 func handleUserResponse(cmd *cobra.Command, args []string, commit *commit) {
 	items := []list.Item{
-		item{title: "✅ Commit this message", desc: "Apply the generated commit message"},
-		item{title: "🔄 Generate another one", desc: "Create a new commit message"},
-		item{title: "📋 Copy to clipboard & exit", desc: "Copy the message and close"},
-		item{title: "🔍 Preview Commit Message", desc: "View the generated commit message"},
-		item{title: "❌ Cancel", desc: "Abort the commit process"},
+		item("✅ Commit this message"),
+		item("🔄 Generate another one"),
+		item("📋 Copy to clipboard & exit"),
+		item("❌ Cancel"),
 	}
 
 	m := model{
@@ -88,66 +126,11 @@ func handleUserResponse(cmd *cobra.Command, args []string, commit *commit) {
 		os.Exit(1)
 	}
 
-	if finalModel, ok := finalModel.(model); ok {
-		choice := finalModel.list.SelectedItem().(item).title
-		switch choice {
-		case "❌ Cancel":
-			log.Info().Msg("Commit aborted.")
-		case "🔄 Generate another one":
-			log.Info().Msg("Regenerating commit message...")
+	if finalModel, ok := finalModel.(model); ok && finalModel.list.SelectedItem() != nil {
+		choice := finalModel.list.SelectedItem().(item)
+		if strings.HasPrefix(string(choice), "🔄") {
 			runAICommit(cmd, args)
-		case "✅ Commit this message":
-			if err := executeGitAdd(); err != nil {
-				log.Error().Err(err).Msg("Failed to execute git add")
-				os.Exit(1)
-			}
-			if err := executeGitCommit(commit.Title, commit.Message); err != nil {
-				log.Error().Err(err).Msg("Failed to execute git commit")
-				os.Exit(1)
-			}
-			log.Info().Msg("Commit successfully created!")
-		case "📋 Copy to clipboard & exit":
-			content := fmt.Sprintf("%s\n\n%s", commit.Title, commit.Message)
-			if err := copyToClipboard(content); err != nil {
-				log.Error().Err(err).Msg("Failed to copy to clipboard")
-			} else {
-				log.Info().Msg("Commit message copied to clipboard.")
-			}
-		case "🔍 Preview Commit Message":
-			previewCommitMessage(commit)
 		}
-	}
-}
-
-type previewModel struct {
-	viewport viewport.Model
-}
-
-func (m previewModel) Init() tea.Cmd {
-	return nil
-}
-
-func (m previewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmd tea.Cmd
-	m.viewport, cmd = m.viewport.Update(msg)
-	return m, cmd
-}
-
-func (m previewModel) View() string {
-	return m.viewport.View()
-}
-
-func previewCommitMessage(commit *commit) {
-	content := renderCommitMessage(commit)
-	vp := viewport.New(80, 20)
-	vp.SetContent(content)
-
-	m := previewModel{viewport: vp}
-
-	p := tea.NewProgram(m, tea.WithAltScreen())
-
-	if _, err := p.Run(); err != nil {
-		log.Error().Err(err).Msg("Error running preview")
 	}
 }
 

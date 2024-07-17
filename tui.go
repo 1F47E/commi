@@ -130,8 +130,11 @@ func handleUserResponse(cmd *cobra.Command, args []string, commit *commit) {
 			log.Info().Msg("Regenerating commit message...")
 			runAICommit(cmd, args)
 		case "Yes":
-			err := executeGitCommit(commit.Title, commit.Message)
-			if err != nil {
+			if err := executeGitAdd(); err != nil {
+				log.Error().Err(err).Msg("Failed to execute git add")
+				os.Exit(1)
+			}
+			if err := executeGitCommit(commit.Title, commit.Message); err != nil {
 				log.Error().Err(err).Msg("Failed to execute git commit")
 				os.Exit(1)
 			}

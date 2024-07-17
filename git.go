@@ -72,8 +72,18 @@ func getGitDiff(file string) (string, error) {
 	return string(output), nil
 }
 
+func executeGitAdd() error {
+	cmd := exec.Command("git", "add", ".")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git add failed: %v\nOutput: %s", err, string(output))
+	}
+	log.Info().Msg("Git add executed successfully")
+	return nil
+}
+
 func executeGitCommit(title, message string) error {
-	cmd := exec.Command("git", "commit", "-am", title, "-m", message)
+	cmd := exec.Command("git", "commit", "-m", title, "-m", message)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("git commit failed: %v\nOutput: %s", err, string(output))

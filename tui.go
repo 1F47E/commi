@@ -43,7 +43,7 @@ func (m tuiModel) Init() tea.Cmd {
 }
 
 func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmd tea.Cmd
+	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
@@ -65,10 +65,14 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.viewport.Height = msg.Height - v - 6 // Subtract 6 for the list title and pagination
 	}
 
+	var cmd tea.Cmd
 	m.viewport, cmd = m.viewport.Update(msg)
-	m.list, cmd = m.list.Update(msg)
+	cmds = append(cmds, cmd)
 
-	return m, cmd
+	m.list, cmd = m.list.Update(msg)
+	cmds = append(cmds, cmd)
+
+	return m, tea.Batch(cmds...)
 }
 
 func (m tuiModel) View() string {

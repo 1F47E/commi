@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/bubbles/list"
+	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/rs/zerolog/log"
@@ -188,7 +189,7 @@ func runEditCommitMessage(commit *commit) (*commit, error) {
 			}
 			return &commit{
 				Title:   lines[0],
-				Message: strings.Join(lines[2:], "\n"),
+				Message: strings.TrimSpace(strings.Join(lines[1:], "\n")),
 			}, nil
 		}
 	}

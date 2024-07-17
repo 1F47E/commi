@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"io"
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"

@@ -130,7 +130,7 @@ func handleUserResponse(cmd *cobra.Command, args []string, commit *commit) {
 	l.Styles.PaginationStyle = paginationStyle
 	l.Styles.HelpStyle = helpStyle
 
-	content := fmt.Sprintf("# %s\n\n%s", commit.Title, commit.Message)
+	content := fmt.Sprintf("**%s**\n\n%s", commit.Title, commit.Message)
 	renderedContent, _ := glamour.Render(content, "dark")
 
 	vp := viewport.New(defaultWidth, 20)

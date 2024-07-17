@@ -15,6 +15,8 @@ import (
 
 var docStyle = lipgloss.NewStyle().Margin(1, 2)
 
+const minViewportHeight = 10
+
 type commit struct {
 	Title   string
 	Message string

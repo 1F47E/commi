@@ -15,14 +15,13 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const viewportWidth = 80
-
 type commit struct {
 	Title   string
 	Message string
 }
 
 const listHeight = 14
+const minViewportHeight = 10
 
 var (
 	titleStyle        = lipgloss.NewStyle().MarginLeft(2).Bold(true)
@@ -95,8 +94,12 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		footerHeight := 3
 		verticalMarginHeight := headerHeight + footerHeight
 
-		m.viewport.Width = msg.Width
-		m.viewport.Height = msg.Height - verticalMarginHeight
+		m.viewport.Width = msg.Width - 4 // Subtract 4 to account for borders
+		viewportHeight := msg.Height - verticalMarginHeight - listHeight
+		if viewportHeight < minViewportHeight {
+			viewportHeight = minViewportHeight
+		}
+		m.viewport.Height = viewportHeight
 		m.list.SetSize(msg.Width, listHeight)
 	}
 
@@ -132,13 +135,22 @@ func handleUserResponse(cmd *cobra.Command, args []string, commit *commit) {
 	l.Styles.HelpStyle = helpStyle
 
 	content := fmt.Sprintf("# %s\n\n%s", commit.Title, commit.Message)
+	
+	p := tea.NewProgram(tuiModel{}, tea.WithAltScreen())
+	initialModel, err := p.StartReturningModel()
+	if err != nil {
+		log.Error().Err(err).Msg("Error starting Bubble Tea program")
+		os.Exit(1)
+	}
+	initialWindowSize := initialModel.(tuiModel).viewport.Width
+
 	renderer, _ := glamour.NewTermRenderer(
 		glamour.WithAutoStyle(),
-		glamour.WithWordWrap(viewportWidth),
+		glamour.WithWordWrap(initialWindowSize - 4), // Subtract 4 to account for borders
 	)
 	renderedContent, _ := renderer.Render(content)
 
-	vp := viewport.New(viewportWidth, 20)
+	vp := viewport.New(initialWindowSize-4, minViewportHeight)
 	vp.Style = lipgloss.NewStyle().
 		BorderStyle(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color("62")).

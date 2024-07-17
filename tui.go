@@ -49,7 +49,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case tea.WindowSizeMsg:
 		h, v := docStyle.GetFrameSize()
-		m.list.SetSize(msg.Width-h, msg.Height-v-10) // Adjust for commit message display
+		m.list.SetSize(msg.Width-h, msg.Height-v-10)
+		messageStyle = messageStyle.Width(msg.Width - h - 4)
 	}
 
 	var cmd tea.Cmd
@@ -64,28 +65,6 @@ func (m model) View() string {
 
 	commitMessage := renderCommitMessage(m.commit)
 	return docStyle.Render(fmt.Sprintf("%s\n\n%s", commitMessage, m.list.View()))
-}
-
-func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		switch msg.String() {
-		case "ctrl+c", "q":
-			m.quitting = true
-			return m, tea.Quit
-		case "enter":
-			i := m.list.SelectedItem()
-			return m, m.choose(i.(item))
-		}
-	case tea.WindowSizeMsg:
-		h, v := docStyle.GetFrameSize()
-		m.list.SetSize(msg.Width-h, msg.Height-v-10)
-		messageStyle = messageStyle.Width(msg.Width - h - 4)
-	}
-
-	var cmd tea.Cmd
-	m.list, cmd = m.list.Update(msg)
-	return m, cmd
 }
 
 func (m model) choose(choice item) tea.Cmd {

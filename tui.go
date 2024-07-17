@@ -14,7 +14,7 @@ import (
 var (
 	docStyle     = lipgloss.NewStyle().Margin(1, 2)
 	titleStyle   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FF6347"))
-	messageStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#4682B4"))
+	messageStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#4682B4")).Width(80)
 )
 
 type commit struct {
@@ -66,6 +66,28 @@ func (m model) View() string {
 	return docStyle.Render(fmt.Sprintf("%s\n\n%s", commitMessage, m.list.View()))
 }
 
+func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "ctrl+c", "q":
+			m.quitting = true
+			return m, tea.Quit
+		case "enter":
+			i := m.list.SelectedItem()
+			return m, m.choose(i.(item))
+		}
+	case tea.WindowSizeMsg:
+		h, v := docStyle.GetFrameSize()
+		m.list.SetSize(msg.Width-h, msg.Height-v-10)
+		messageStyle = messageStyle.Width(msg.Width - h - 4)
+	}
+
+	var cmd tea.Cmd
+	m.list, cmd = m.list.Update(msg)
+	return m, cmd
+}
+
 func (m model) choose(choice item) tea.Cmd {
 	return func() tea.Msg {
 		switch choice {
@@ -115,7 +137,6 @@ func handleUserResponse(cmd *cobra.Command, args []string, commit *commit) {
 		list:   list.New(items, list.NewDefaultDelegate(), 0, 0),
 		commit: commit,
 	}
-	m.list.Title = "Commit Options"
 
 	p := tea.NewProgram(m, tea.WithAltScreen())
 

@@ -75,11 +75,6 @@ func getClient() (LLMClient, error) {
 	return nil, fmt.Errorf("no API key found for Anthropic or OpenAI")
 }
 
-type commit struct {
-	Title   string
-	Message string
-}
-
 // LLMClient interface is defined in clients.go
 
 func generateCommitMessage(client LLMClient, status, diffs string) (*commit, error) {

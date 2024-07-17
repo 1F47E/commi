@@ -168,8 +168,8 @@ func handleUserResponse(cmd *cobra.Command, args []string, commit *commit) {
 		}
 	}
 }
-func runEditCommitMessage(commit *commit) (*commit, error) {
-	initialContent := fmt.Sprintf("%s\n\n%s", commit.Title, commit.Message)
+func runEditCommitMessage(commitMsg *commit) (*commit, error) {
+	initialContent := fmt.Sprintf("%s\n\n%s", commitMsg.Title, commitMsg.Message)
 	
 	m := textEditModel{
 		textArea: textarea.New(),

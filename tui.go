@@ -124,18 +124,18 @@ func handleUserResponse(cmd *cobra.Command, args []string, commit *commit) {
 			runAICommit(cmd, args)
 		case "✅ Commit this message":
 			if err := executeGitAdd(); err != nil {
-				log.Error().Err(err).Msg("Failed to execute git add")
+				log.Error().Msg(fmt.Sprintf("Failed to execute git add: %v", err))
 				os.Exit(1)
 			}
 			if err := executeGitCommit(commit.Title, commit.Message); err != nil {
-				log.Error().Err(err).Msg("Failed to execute git commit")
+				log.Error().Msg(fmt.Sprintf("Failed to execute git commit: %v", err))
 				os.Exit(1)
 			}
 			log.Info().Msg("Commit successfully created!")
 		case "📋 Copy to clipboard & exit":
 			content := fmt.Sprintf("%s\n\n%s", commit.Title, commit.Message)
 			if err := copyToClipboard(content); err != nil {
-				log.Error().Err(err).Msg("Failed to copy to clipboard")
+				log.Error().Msg(fmt.Sprintf("Failed to copy to clipboard: %v", err))
 			} else {
 				log.Info().Msg("Commit message copied to clipboard.")
 			}

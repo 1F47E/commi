@@ -13,8 +13,10 @@ import (
 )
 
 var (
-	docStyle = lipgloss.NewStyle().Margin(1, 2)
-	titleStyle = lipgloss.NewStyle().Bold(true)
+	docStyle    = lipgloss.NewStyle().Margin(1, 2)
+	titleStyle  = lipgloss.NewStyle().Bold(true)
+	listStyle   = lipgloss.NewStyle().Margin(1, 0, 0, 2)
+	selectedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
 )
 
 type commit struct {
@@ -32,6 +34,8 @@ type tuiModel struct {
 	commit   *commit
 	choice   string
 	quitting bool
+	width    int
+	height   int
 }
 
 func (m tuiModel) Init() tea.Cmd {
@@ -55,11 +59,12 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 	case tea.WindowSizeMsg:
+		m.width, m.height = msg.Width, msg.Height
 		h, v := docStyle.GetFrameSize()
-		m.list.SetSize(msg.Width-h, msg.Height/2-v)
-		
 		m.viewport.Width = msg.Width - h
-		m.viewport.Height = msg.Height/2 - v
+		m.viewport.Height = msg.Height - v - 6 // Reserve space for the list
+		m.list.SetWidth(msg.Width - h)
+		m.list.SetHeight(5) // Fixed height for the list
 		
 		if m.commit != nil {
 			m.viewport.SetContent(renderCommitMessage(m.commit))
@@ -80,7 +85,7 @@ func (m tuiModel) View() string {
 	return docStyle.Render(fmt.Sprintf(
 		"%s\n%s",
 		m.viewport.View(),
-		m.list.View(),
+		listStyle.Render(m.list.View()),
 	))
 }
 
@@ -96,7 +101,11 @@ func handleUserResponse(cmd *cobra.Command, args []string, commit *commit) {
 		menuItem("❌ Cancel"),
 	}
 
-	l := list.New(items, list.NewDefaultDelegate(), 0, 0)
+	delegate := list.NewDefaultDelegate()
+	delegate.Styles.SelectedTitle = selectedStyle
+	delegate.Styles.SelectedDesc = selectedStyle
+
+	l := list.New(items, delegate, 0, 0)
 	l.Title = "Options"
 	l.SetShowStatusBar(false)
 	l.SetFilteringEnabled(false)

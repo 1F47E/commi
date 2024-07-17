@@ -22,13 +22,13 @@ const (
 func truncatePrompt(prompt string, maxTokens int) string {
 	promptTokens := len(strings.Split(prompt, " ")) * 2
 
-	log.Debug().Msgf("Prompt tokens: %d", promptTokens)
+	log.Debug().Msg(fmt.Sprintf("Prompt tokens: %d", promptTokens))
 	if promptTokens > maxTokens {
 		words := strings.Split(prompt, " ")
 		truncatedWords := words[:maxTokens/2]
 		prompt = strings.Join(truncatedWords, " ")
 		prompt += "..."
-		log.Warn().Msgf("Truncating prompt to %d tokens", maxTokens)
+		log.Warn().Msg(fmt.Sprintf("Truncating prompt to %d tokens", maxTokens))
 	}
 
 	return prompt
@@ -186,7 +186,7 @@ func (c *AnthropicClient) GenerateCommitMessage(status, diffs string) (*commit, 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("API request failed with status code %d: %s", resp.StatusCode, string(body))
 	}
-	log.Debug().Msgf("Response body:\n%s", string(body))
+	log.Debug().Msg(fmt.Sprintf("Response body:\n%s", string(body)))
 
 	var result struct {
 		Content []struct {
@@ -202,7 +202,7 @@ func (c *AnthropicClient) GenerateCommitMessage(status, diffs string) (*commit, 
 	}
 
 	text := result.Content[0].Text
-	log.Debug().Msgf("Response text:\n%s", text)
+	log.Debug().Msg(fmt.Sprintf("Response text:\n%s", text))
 
 	lines := strings.SplitN(text, "\n", 2)
 	if len(lines) < 2 {
@@ -213,7 +213,7 @@ func (c *AnthropicClient) GenerateCommitMessage(status, diffs string) (*commit, 
 		Title:   strings.TrimSpace(lines[0]),
 		Message: strings.TrimSpace(lines[1]),
 	}
-	log.Debug().Msgf("Commit data:\n%v", commitData)
+	log.Debug().Msg(fmt.Sprintf("Commit data:\n%v", commitData))
 
 	return commitData, nil
 }

@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/list"
@@ -142,7 +144,21 @@ func handleUserResponse(cmd *cobra.Command, args []string, commit *commit) {
 			log.Info().Msg("Commit successfully created!")
 		case "Edit":
 			commitCommand := fmt.Sprintf("git commit -m \"%s\" -m \"%s\"", commit.Title, commit.Message)
-			fmt.Printf("Run the following command to commit with this message:\n\n%s\n\nYou can edit the message before committing.\n", commitCommand)
+			fmt.Printf("Press Enter to execute: %s\n", commitCommand)
+			
+			reader := bufio.NewReader(os.Stdin)
+			_, _ = reader.ReadString('\n')
+
+			cmd := exec.Command("sh", "-c", commitCommand)
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+
+			err := cmd.Run()
+			if err != nil {
+				fmt.Printf("Error executing command: %v\n", err)
+			} else {
+				fmt.Println("Commit executed successfully.")
+			}
 		}
 	}
 }

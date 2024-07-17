@@ -8,7 +8,9 @@ import (
 
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/textarea"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
@@ -22,7 +24,7 @@ type commit struct {
 const listHeight = 14
 
 var (
-	titleStyle        = lipgloss.NewStyle().MarginLeft(2)
+	titleStyle        = lipgloss.NewStyle().MarginLeft(2).Bold(true)
 	itemStyle         = lipgloss.NewStyle().PaddingLeft(4)
 	selectedItemStyle = lipgloss.NewStyle().PaddingLeft(2).Foreground(lipgloss.Color("170"))
 	paginationStyle   = list.DefaultStyles().PaginationStyle.PaddingLeft(4)
@@ -57,9 +59,9 @@ func (d itemDelegate) Render(w io.Writer, m list.Model, index int, listItem list
 }
 
 type tuiModel struct {
+	viewport viewport.Model
 	list     list.Model
-	title    string
-	message  string
+	commit   *commit
 	choice   string
 	quitting bool
 }
@@ -69,16 +71,17 @@ func (m tuiModel) Init() tea.Cmd {
 }
 
 func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var (
+		cmd  tea.Cmd
+		cmds []tea.Cmd
+	)
+
 	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
-		m.list.SetWidth(msg.Width)
-		return m, nil
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "q", "ctrl+c":
 			m.quitting = true
 			return m, tea.Quit
-
 		case "enter":
 			i, ok := m.list.SelectedItem().(item)
 			if ok {
@@ -86,20 +89,27 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, tea.Quit
 		}
+	case tea.WindowSizeMsg:
+		headerHeight := 6
+		footerHeight := 3
+		verticalMarginHeight := headerHeight + footerHeight
+
+		m.viewport.Width = msg.Width
+		m.viewport.Height = msg.Height - verticalMarginHeight
+		m.list.SetSize(msg.Width, listHeight)
 	}
 
-	var cmd tea.Cmd
+	m.viewport, cmd = m.viewport.Update(msg)
+	cmds = append(cmds, cmd)
+
 	m.list, cmd = m.list.Update(msg)
-	return m, cmd
+	cmds = append(cmds, cmd)
+
+	return m, tea.Batch(cmds...)
 }
 
 func (m tuiModel) View() string {
-	return fmt.Sprintf(
-		"\033[1m%s\033[0m\n\n%s%s",
-		m.title,
-		m.message,
-		m.list.View(),
-	)
+	return fmt.Sprintf("%s\n\n%s", m.viewport.View(), m.list.View())
 }
 
 func handleUserResponse(cmd *cobra.Command, args []string, commit *commit) {
@@ -120,9 +130,19 @@ func handleUserResponse(cmd *cobra.Command, args []string, commit *commit) {
 	l.Styles.PaginationStyle = paginationStyle
 	l.Styles.HelpStyle = helpStyle
 
-	m := tuiModel{list: l, title: commit.Title, message: commit.Message}
+	content := fmt.Sprintf("# %s\n\n%s", commit.Title, commit.Message)
+	renderedContent, _ := glamour.Render(content, "dark")
 
-	p := tea.NewProgram(m)
+	vp := viewport.New(defaultWidth, 20)
+	vp.SetContent(renderedContent)
+
+	m := tuiModel{
+		viewport: vp,
+		list:     l,
+		commit:   commit,
+	}
+
+	p := tea.NewProgram(m, tea.WithAltScreen())
 	finalModel, err := p.Run()
 	if err != nil {
 		log.Error().Err(err).Msg("Error running Bubble Tea program")
@@ -178,6 +198,7 @@ func runEditCommitMessage(commitMsg *commit) (*commit, error) {
 	m.textArea.SetValue(initialContent)
 	m.textArea.Focus()
 	m.textArea.ShowLineNumbers = false
+	m.textArea.Placeholder = "Enter your commit message here..."
 
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	finalModel, err := p.Run()
@@ -206,6 +227,8 @@ type textEditModel struct {
 	choices  []string
 	cursor   int
 	choice   string
+	width    int
+	height   int
 }
 
 func (m textEditModel) Init() tea.Cmd {
@@ -216,6 +239,11 @@ func (m textEditModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+		m.textArea.SetWidth(m.width - 4)
+		m.textArea.SetHeight(m.height - 10)
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c", "q":
@@ -257,19 +285,36 @@ func (m textEditModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m textEditModel) View() string {
 	var s strings.Builder
 
-	s.WriteString("Edit your commit message:\n\n")
-	s.WriteString(m.textArea.View())
+	titleStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#FAFAFA")).
+		Background(lipgloss.Color("#7D56F4")).
+		Padding(0, 1)
+
+	s.WriteString(titleStyle.Render("Edit your commit message"))
+	s.WriteString("\n\n")
+
+	s.WriteString(lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		Padding(1).
+		Render(m.textArea.View()))
 	s.WriteString("\n\n")
 
 	for i, choice := range m.choices {
+		style := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#FAFAFA")).
+			Background(lipgloss.Color("#383838")).
+			Padding(0, 1)
+
 		if m.cursor == i {
-			s.WriteString("> ")
-		} else {
-			s.WriteString("  ")
+			style = style.Copy().
+				Background(lipgloss.Color("#7D56F4"))
 		}
-		s.WriteString(choice)
-		s.WriteString("\n")
+
+		s.WriteString(style.Render(choice))
+		s.WriteString(" ")
 	}
 
-	return s.String()
+	return lipgloss.NewStyle().
+		Margin(1).
+		Render(s.String())
 }

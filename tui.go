@@ -306,8 +306,7 @@ func (m textEditModel) View() string {
 			Padding(0, 1)
 
 		if m.cursor == i {
-			style = style.Copy().
-				Background(lipgloss.Color("#7D56F4"))
+			style = style.Background(lipgloss.Color("#7D56F4"))
 		}
 
 		s.WriteString(style.Render(choice))

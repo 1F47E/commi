@@ -8,7 +8,6 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
@@ -17,6 +16,7 @@ import (
 var (
 	docStyle = lipgloss.NewStyle().Margin(1, 2)
 	appStyle = lipgloss.NewStyle().Padding(1, 2, 1, 2)
+	titleStyle = lipgloss.NewStyle().Bold(true)
 )
 
 type commit struct {
@@ -83,16 +83,9 @@ func (m tuiModel) View() string {
 	return appStyle.Render(fmt.Sprintf("%s\n\n%s", m.viewport.View(), m.list.View()))
 }
 
-func renderCommitMessage(commit *commit, width int) (string, error) {
-	content := fmt.Sprintf("# %s\n\n%s", commit.Title, commit.Message)
-	renderer, err := glamour.NewTermRenderer(
-		glamour.WithAutoStyle(),
-		glamour.WithWordWrap(width),
-	)
-	if err != nil {
-		return "", err
-	}
-	return renderer.Render(content)
+func renderCommitMessage(commit *commit, width int) string {
+	title := titleStyle.Render(commit.Title)
+	return fmt.Sprintf("%s\n\n%s", title, commit.Message)
 }
 
 func handleUserResponse(cmd *cobra.Command, args []string, commit *commit) {
@@ -114,15 +107,8 @@ func handleUserResponse(cmd *cobra.Command, args []string, commit *commit) {
 	p := tea.NewProgram(m, tea.WithAltScreen())
 
 	go func() {
-		for {
-			renderedContent, err := renderCommitMessage(commit, m.windowWidth)
-			if err != nil {
-				log.Error().Msg(fmt.Sprintf("Error rendering commit message: %v", err))
-				return
-			}
-			p.Send(setContentMsg(renderedContent))
-			time.Sleep(time.Millisecond * 100)
-		}
+		renderedContent := renderCommitMessage(commit, m.windowWidth)
+		p.Send(setContentMsg(renderedContent))
 	}()
 
 	finalModel, err := p.Run()

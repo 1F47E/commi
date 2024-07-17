@@ -98,9 +98,10 @@ func (m tuiModel) View() string {
 
 func handleUserResponse(cmd *cobra.Command, args []string, commit *commit) {
 	items := []list.Item{
-		item("Yes"),
+		item("Commit this message"),
 		item("No"),
 		item("Redo"),
+		item("Edit"),
 	}
 
 	const defaultWidth = 30
@@ -129,7 +130,7 @@ func handleUserResponse(cmd *cobra.Command, args []string, commit *commit) {
 		case "Redo":
 			log.Info().Msg("Regenerating commit message...")
 			runAICommit(cmd, args)
-		case "Yes":
+		case "Commit this message":
 			if err := executeGitAdd(); err != nil {
 				log.Error().Err(err).Msg("Failed to execute git add")
 				os.Exit(1)
@@ -139,6 +140,9 @@ func handleUserResponse(cmd *cobra.Command, args []string, commit *commit) {
 				os.Exit(1)
 			}
 			log.Info().Msg("Commit successfully created!")
+		case "Edit":
+			commitCommand := fmt.Sprintf("git commit -m \"%s\" -m \"%s\"", commit.Title, commit.Message)
+			fmt.Printf("Run the following command to commit with this message:\n\n%s\n\nYou can edit the message before committing.\n", commitCommand)
 		}
 	}
 }

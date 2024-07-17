@@ -19,8 +19,6 @@ var (
 	appStyle = lipgloss.NewStyle().Padding(1, 2, 1, 2)
 )
 
-const minViewportHeight = 10
-
 type commit struct {
 	Title   string
 	Message string
@@ -162,11 +160,6 @@ func handleUserResponse(cmd *cobra.Command, args []string, commit *commit) {
 }
 
 type setContentMsg string
-
-func (m tuiModel) updateContent(content string) (tuiModel, tea.Cmd) {
-	m.viewport.SetContent(content)
-	return m, nil
-}
 func copyToClipboard(content string) error {
 	// Implementation of copyToClipboard function
 	// This will depend on the clipboard library you choose to use

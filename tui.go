@@ -104,7 +104,7 @@ func (m model) View() string {
 }
 
 func renderCommitMessage(commit *commit) string {
-	return fmt.Sprintf("%s\n\n%s", titleStyle.Render(commit.Title), messageStyle.Render(commit.Message))
+	return fmt.Sprintf("%s\n\n%s", commit.Title, commit.Message)
 }
 
 func handleUserResponse(cmd *cobra.Command, args []string, commit *commit) {

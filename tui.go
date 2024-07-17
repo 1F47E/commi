@@ -13,8 +13,8 @@ import (
 )
 
 var (
-	docStyle    = lipgloss.NewStyle().Margin(1, 2)
-	titleStyle  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FF6347"))
+	docStyle     = lipgloss.NewStyle().Margin(1, 2)
+	titleStyle   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FF6347"))
 	messageStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#4682B4"))
 )
 
@@ -50,7 +50,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case tea.WindowSizeMsg:
 		h, v := docStyle.GetFrameSize()
-		m.list.SetSize(msg.Width-h, msg.Height-v-6) // Adjust for commit message display
+		m.list.SetSize(msg.Width-h, msg.Height-v-10) // Adjust for commit message display
 	}
 
 	var cmd tea.Cmd
@@ -70,13 +70,13 @@ func (m model) View() string {
 func (m model) choose(choice item) tea.Cmd {
 	return func() tea.Msg {
 		switch choice {
-		case "❌ Cancel":
+		case "Cancel":
 			log.Info().Msg("Commit aborted.")
 			return tea.Quit()
-		case "🔄 Generate another one":
+		case "Regenerate":
 			log.Info().Msg("Regenerating commit message...")
 			return tea.Quit()
-		case "✅ Commit this message":
+		case "Commit this":
 			if err := executeGitAdd(); err != nil {
 				log.Error().Err(err).Msg("Failed to execute git add")
 				return tea.Quit()
@@ -87,7 +87,7 @@ func (m model) choose(choice item) tea.Cmd {
 			}
 			log.Info().Msg("Commit successfully created!")
 			return tea.Quit()
-		case "📋 Copy to clipboard & exit":
+		case "Copy to clipboard and exit":
 			content := fmt.Sprintf("%s\n\n%s", m.commit.Title, m.commit.Message)
 			if err := copyToClipboard(content); err != nil {
 				log.Error().Err(err).Msg("Failed to copy to clipboard")
@@ -106,10 +106,10 @@ func renderCommitMessage(commit *commit) string {
 
 func handleUserResponse(cmd *cobra.Command, args []string, commit *commit) {
 	items := []list.Item{
-		item("✅ Commit this message"),
-		item("🔄 Generate another one"),
-		item("📋 Copy to clipboard & exit"),
-		item("❌ Cancel"),
+		item("Commit this"),
+		item("Copy to clipboard and exit"),
+		item("Regenerate"),
+		item("Cancel"),
 	}
 
 	m := model{
@@ -128,7 +128,7 @@ func handleUserResponse(cmd *cobra.Command, args []string, commit *commit) {
 
 	if finalModel, ok := finalModel.(model); ok && finalModel.list.SelectedItem() != nil {
 		choice := finalModel.list.SelectedItem().(item)
-		if strings.HasPrefix(string(choice), "🔄") {
+		if string(choice) == "Regenerate" {
 			runAICommit(cmd, args)
 		}
 	}

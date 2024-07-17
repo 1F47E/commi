@@ -16,7 +16,7 @@ import (
 const listHeight = 14
 
 var (
-	titleStyle        = lipgloss.NewStyle().MarginLeft(2).Bold(true).Foreground(lipgloss.Color("#FF6347"))
+	titleStyle        = lipgloss.NewStyle().MarginLeft(2).Bold(true)
 	itemStyle         = lipgloss.NewStyle().PaddingLeft(4)
 	selectedItemStyle = lipgloss.NewStyle().PaddingLeft(2).Foreground(lipgloss.Color("170"))
 	paginationStyle   = list.DefaultStyles().PaginationStyle.PaddingLeft(4)
@@ -109,16 +109,16 @@ func renderCommitMessage(commit *commit) string {
 
 func handleUserResponse(cmd *cobra.Command, args []string, commit *commit) {
 	items := []list.Item{
-		item("Commit this"),
-		item("Copy to clipboard and exit"),
-		item("Regenerate"),
-		item("Cancel"),
+		item("✅ Commit this"),
+		item("📋 Copy to clipboard and exit"),
+		item("🔄 Regenerate"),
+		item("❌ Cancel"),
 	}
 
 	const defaultWidth = 30
 
 	l := list.New(items, itemDelegate{}, defaultWidth, listHeight)
-	l.Title = "Choose an action"
+	l.Title = ""
 	l.SetShowStatusBar(false)
 	l.SetFilteringEnabled(false)
 	l.Styles.Title = titleStyle

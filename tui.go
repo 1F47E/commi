@@ -2,7 +2,9 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
@@ -11,25 +13,55 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var (
-	docStyle     = lipgloss.NewStyle().Margin(1, 2)
-	titleStyle   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FF6347"))
-	messageStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#4682B4")).Width(80)
-)
+const listHeight = 14
 
-type commit struct {
-	Title   string
-	Message string
-}
+var (
+	titleStyle        = lipgloss.NewStyle().MarginLeft(2).Bold(true).Foreground(lipgloss.Color("#FF6347"))
+	itemStyle         = lipgloss.NewStyle().PaddingLeft(4)
+	selectedItemStyle = lipgloss.NewStyle().PaddingLeft(2).Foreground(lipgloss.Color("170"))
+	paginationStyle   = list.DefaultStyles().PaginationStyle.PaddingLeft(4)
+	helpStyle         = list.DefaultStyles().HelpStyle.PaddingLeft(4).PaddingBottom(1)
+	quitTextStyle     = lipgloss.NewStyle().Margin(1, 0, 2, 4)
+	messageStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("#4682B4")).MarginLeft(4)
+)
 
 type item string
 
-func (i item) FilterValue() string { return string(i) }
+func (i item) FilterValue() string { return "" }
+
+type itemDelegate struct{}
+
+func (d itemDelegate) Height() int                             { return 1 }
+func (d itemDelegate) Spacing() int                            { return 0 }
+func (d itemDelegate) Update(_ tea.Msg, _ *list.Model) tea.Cmd { return nil }
+func (d itemDelegate) Render(w io.Writer, m list.Model, index int, listItem list.Item) {
+	i, ok := listItem.(item)
+	if !ok {
+		return
+	}
+
+	str := fmt.Sprintf("%s", i)
+
+	fn := itemStyle.Render
+	if index == m.Index() {
+		fn = func(s ...string) string {
+			return selectedItemStyle.Render("> " + strings.Join(s, " "))
+		}
+	}
+
+	fmt.Fprint(w, fn(str))
+}
 
 type model struct {
 	list     list.Model
 	commit   *commit
+	choice   string
 	quitting bool
+}
+
+type commit struct {
+	Title   string
+	Message string
 }
 
 func (m model) Init() tea.Cmd {
@@ -38,19 +70,23 @@ func (m model) Init() tea.Cmd {
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.list.SetWidth(msg.Width)
+		return m, nil
+
 	case tea.KeyMsg:
-		switch msg.String() {
-		case "ctrl+c", "q":
+		switch keypress := msg.String(); keypress {
+		case "q", "ctrl+c":
 			m.quitting = true
 			return m, tea.Quit
+
 		case "enter":
-			i := m.list.SelectedItem()
-			return m, m.choose(i.(item))
+			i, ok := m.list.SelectedItem().(item)
+			if ok {
+				m.choice = string(i)
+			}
+			return m, tea.Quit
 		}
-	case tea.WindowSizeMsg:
-		h, v := docStyle.GetFrameSize()
-		m.list.SetSize(msg.Width-h, msg.Height-v-10)
-		messageStyle = messageStyle.Width(msg.Width - h - 4)
 	}
 
 	var cmd tea.Cmd
@@ -60,44 +96,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m model) View() string {
 	if m.quitting {
-		return ""
+		return quitTextStyle.Render("Exiting...")
 	}
 
 	commitMessage := renderCommitMessage(m.commit)
-	return docStyle.Render(fmt.Sprintf("%s\n\n%s", commitMessage, m.list.View()))
-}
-
-func (m model) choose(choice item) tea.Cmd {
-	return func() tea.Msg {
-		switch choice {
-		case "Cancel":
-			log.Info().Msg("Commit aborted.")
-			return tea.Quit()
-		case "Regenerate":
-			log.Info().Msg("Regenerating commit message...")
-			return tea.Quit()
-		case "Commit this":
-			if err := executeGitAdd(); err != nil {
-				log.Error().Err(err).Msg("Failed to execute git add")
-				return tea.Quit()
-			}
-			if err := executeGitCommit(m.commit.Title, m.commit.Message); err != nil {
-				log.Error().Err(err).Msg("Failed to execute git commit")
-				return tea.Quit()
-			}
-			log.Info().Msg("Commit successfully created!")
-			return tea.Quit()
-		case "Copy to clipboard and exit":
-			content := fmt.Sprintf("%s\n\n%s", m.commit.Title, m.commit.Message)
-			if err := copyToClipboard(content); err != nil {
-				log.Error().Err(err).Msg("Failed to copy to clipboard")
-			} else {
-				log.Info().Msg("Commit message copied to clipboard.")
-			}
-			return tea.Quit()
-		}
-		return nil
-	}
+	return fmt.Sprintf("%s\n\n%s", commitMessage, m.list.View())
 }
 
 func renderCommitMessage(commit *commit) string {
@@ -112,10 +115,17 @@ func handleUserResponse(cmd *cobra.Command, args []string, commit *commit) {
 		item("Cancel"),
 	}
 
-	m := model{
-		list:   list.New(items, list.NewDefaultDelegate(), 0, 0),
-		commit: commit,
-	}
+	const defaultWidth = 30
+
+	l := list.New(items, itemDelegate{}, defaultWidth, listHeight)
+	l.Title = "Choose an action"
+	l.SetShowStatusBar(false)
+	l.SetFilteringEnabled(false)
+	l.Styles.Title = titleStyle
+	l.Styles.PaginationStyle = paginationStyle
+	l.Styles.HelpStyle = helpStyle
+
+	m := model{list: l, commit: commit}
 
 	p := tea.NewProgram(m, tea.WithAltScreen())
 
@@ -125,10 +135,29 @@ func handleUserResponse(cmd *cobra.Command, args []string, commit *commit) {
 		os.Exit(1)
 	}
 
-	if finalModel, ok := finalModel.(model); ok && finalModel.list.SelectedItem() != nil {
-		choice := finalModel.list.SelectedItem().(item)
-		if string(choice) == "Regenerate" {
+	if finalModel, ok := finalModel.(model); ok {
+		switch finalModel.choice {
+		case "Commit this":
+			if err := executeGitAdd(); err != nil {
+				log.Error().Err(err).Msg("Failed to execute git add")
+				return
+			}
+			if err := executeGitCommit(commit.Title, commit.Message); err != nil {
+				log.Error().Err(err).Msg("Failed to execute git commit")
+				return
+			}
+			log.Info().Msg("Commit successfully created!")
+		case "Copy to clipboard and exit":
+			content := fmt.Sprintf("%s\n\n%s", commit.Title, commit.Message)
+			if err := copyToClipboard(content); err != nil {
+				log.Error().Err(err).Msg("Failed to copy to clipboard")
+			} else {
+				log.Info().Msg("Commit message copied to clipboard.")
+			}
+		case "Regenerate":
 			runAICommit(cmd, args)
+		case "Cancel":
+			log.Info().Msg("Commit aborted.")
 		}
 	}
 }

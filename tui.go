@@ -14,7 +14,6 @@ import (
 
 var (
 	docStyle = lipgloss.NewStyle().Margin(1, 2)
-	appStyle = lipgloss.NewStyle().Padding(1, 2, 1, 2)
 	titleStyle = lipgloss.NewStyle().Bold(true)
 )
 

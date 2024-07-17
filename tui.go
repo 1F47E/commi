@@ -137,9 +137,9 @@ func handleUserResponse(cmd *cobra.Command, args []string, commit *commit) {
 	content := fmt.Sprintf("# %s\n\n%s", commit.Title, commit.Message)
 	
 	p := tea.NewProgram(tuiModel{}, tea.WithAltScreen())
-	initialModel, err := p.StartReturningModel()
+	initialModel, err := p.Run()
 	if err != nil {
-		log.Error().Err(err).Msg("Error starting Bubble Tea program")
+		log.Error().Err(err).Msg("Error running Bubble Tea program")
 		os.Exit(1)
 	}
 	initialWindowSize := initialModel.(tuiModel).viewport.Width

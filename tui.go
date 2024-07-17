@@ -22,7 +22,6 @@ var (
 	paginationStyle   = list.DefaultStyles().PaginationStyle.PaddingLeft(4)
 	helpStyle         = list.DefaultStyles().HelpStyle.PaddingLeft(4).PaddingBottom(1)
 	quitTextStyle     = lipgloss.NewStyle().Margin(1, 0, 2, 4)
-	messageStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("#4682B4")).MarginLeft(4)
 )
 
 type item string

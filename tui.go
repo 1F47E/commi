@@ -104,10 +104,10 @@ func (m tuiModel) View() string {
 
 func handleUserResponse(cmd *cobra.Command, args []string, commit *commit) {
 	items := []list.Item{
-		item("Commit this message"),
-		item("No"),
-		item("Generate another one"),
-		item("Edit"),
+		item("✅ Commit this message"),
+		item("🔄 Generate another one"),
+		item("✏️ Edit"),
+		item("❌ Cancel"),
 	}
 
 	const defaultWidth = 30
@@ -131,12 +131,12 @@ func handleUserResponse(cmd *cobra.Command, args []string, commit *commit) {
 
 	if finalModel, ok := finalModel.(tuiModel); ok {
 		switch finalModel.choice {
-		case "No":
+		case "❌ Cancel":
 			log.Info().Msg("Commit aborted.")
-		case "Generate another one":
+		case "🔄 Generate another one":
 			log.Info().Msg("Regenerating commit message...")
 			runAICommit(cmd, args)
-		case "Commit this message":
+		case "✅ Commit this message":
 			if err := executeGitAdd(); err != nil {
 				log.Error().Err(err).Msg("Failed to execute git add")
 				os.Exit(1)
@@ -146,7 +146,7 @@ func handleUserResponse(cmd *cobra.Command, args []string, commit *commit) {
 				os.Exit(1)
 			}
 			log.Info().Msg("Commit successfully created!")
-		case "Edit":
+		case "✏️ Edit":
 			editedCommit, err := runEditCommitMessage(commit)
 			if err != nil {
 				log.Error().Err(err).Msg("Failed to edit commit message")
@@ -173,12 +173,13 @@ func runEditCommitMessage(commitMsg *commit) (*commit, error) {
 	
 	m := textEditModel{
 		textArea: textarea.New(),
-		choices:  []string{"Commit this", "Cancel"},
+		choices:  []string{"✅ Commit this", "❌ Cancel"},
 	}
 	m.textArea.SetValue(initialContent)
 	m.textArea.Focus()
+	m.textArea.ShowLineNumbers = false
 
-	p := tea.NewProgram(m)
+	p := tea.NewProgram(m, tea.WithAltScreen())
 	finalModel, err := p.Run()
 	if err != nil {
 		return nil, fmt.Errorf("error running text edit program: %w", err)

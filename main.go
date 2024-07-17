@@ -102,8 +102,10 @@ func getClient() (LLMClient, error) {
 
 func generateCommitMessage(client LLMClient, status, diffs string) (*commit, error) {
 	modelName := getModelName(client)
+	log.Debug().Str("model", modelName).Msg("Using AI model for commit message generation")
+
 	spinner := NewSpinner()
-	spinner.Start(fmt.Sprintf("Generating commit message using %s...", modelName))
+	spinner.Start("Generating commit message...")
 
 	commitMessage, err := client.GenerateCommitMessage(status, diffs)
 

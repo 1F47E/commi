@@ -7,7 +7,6 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
-	"github.com/fatih/color"
 )
 
 // ===== CONSTANTS
@@ -26,26 +25,12 @@ var rootCmd = &cobra.Command{
 
 func init() {
 	rootCmd.Flags().BoolP("version", "v", false, "Display version information")
-	
+
 	// Configure zerolog
-	output := zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: ""}
-	output.FormatLevel = func(i interface{}) string {
-		level := i.(string)
-		switch level {
-		case "debug":
-			return color.BlueString("DBG")
-		case "info":
-			return color.GreenString("INF")
-		case "warn":
-			return color.YellowString("WRN")
-		case "error":
-			return color.RedString("ERR")
-		default:
-			return color.WhiteString(level)
-		}
-	}
-	output.FormatMessage = func(i interface{}) string {
-		return fmt.Sprintf("%s", i)
+	output := zerolog.ConsoleWriter{
+		Out:        os.Stdout,
+		TimeFormat: "",
+		NoColor:    false,
 	}
 	log.Logger = log.Output(output)
 }

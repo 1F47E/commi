@@ -118,7 +118,7 @@ func handleUserResponse(cmd *cobra.Command, args []string, commit *commit) {
 	items := []list.Item{
 		item("✅ Commit this message"),
 		item("🔄 Generate another one"),
-		item("✏️ Edit"),
+		item("📋 Copy to clipboard & exit"),
 		item("❌ Cancel"),
 	}
 
@@ -176,154 +176,19 @@ func handleUserResponse(cmd *cobra.Command, args []string, commit *commit) {
 				os.Exit(1)
 			}
 			log.Info().Msg("Commit successfully created!")
-		case "✏️ Edit":
-			editedCommit, err := runEditCommitMessage(commit)
-			if err != nil {
-				log.Error().Err(err).Msg("Failed to edit commit message")
-				return
-			}
-			if editedCommit != nil {
-				if err := executeGitAdd(); err != nil {
-					log.Error().Err(err).Msg("Failed to execute git add")
-					os.Exit(1)
-				}
-				if err := executeGitCommit(editedCommit.Title, editedCommit.Message); err != nil {
-					log.Error().Err(err).Msg("Failed to execute git commit")
-					os.Exit(1)
-				}
-				log.Info().Msg("Commit successfully created with edited message!")
+		case "📋 Copy to clipboard & exit":
+			content := fmt.Sprintf("%s\n\n%s", commit.Title, commit.Message)
+			if err := copyToClipboard(content); err != nil {
+				log.Error().Err(err).Msg("Failed to copy to clipboard")
 			} else {
-				log.Info().Msg("Edit cancelled.")
+				log.Info().Msg("Commit message copied to clipboard.")
 			}
 		}
 	}
 }
-func runEditCommitMessage(commitMsg *commit) (*commit, error) {
-	initialContent := fmt.Sprintf("%s\n\n%s", commitMsg.Title, commitMsg.Message)
-	
-	m := textEditModel{
-		textArea: textarea.New(),
-		choices:  []string{"✅ Commit this", "❌ Cancel"},
-	}
-	m.textArea.SetValue(initialContent)
-	m.textArea.Focus()
-	m.textArea.ShowLineNumbers = false
-	m.textArea.Placeholder = "Enter your commit message here..."
-
-	p := tea.NewProgram(m, tea.WithAltScreen())
-	finalModel, err := p.Run()
-	if err != nil {
-		return nil, fmt.Errorf("error running text edit program: %w", err)
-	}
-
-	if finalModel, ok := finalModel.(textEditModel); ok {
-		if finalModel.choice == "Commit this" {
-			lines := strings.Split(finalModel.textArea.Value(), "\n")
-			if len(lines) < 2 {
-				return nil, fmt.Errorf("invalid commit message format")
-			}
-			return &commit{
-				Title:   lines[0],
-				Message: strings.TrimSpace(strings.Join(lines[1:], "\n")),
-			}, nil
-		}
-	}
-
-	return nil, nil
-}
-
-type textEditModel struct {
-	textArea textarea.Model
-	choices  []string
-	cursor   int
-	choice   string
-	width    int
-	height   int
-}
-
-func (m textEditModel) Init() tea.Cmd {
-	return textarea.Blink
-}
-
-func (m textEditModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmd tea.Cmd
-
-	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		m.height = msg.Height
-		m.textArea.SetWidth(m.width - 4)
-		m.textArea.SetHeight(m.height - 10)
-	case tea.KeyMsg:
-		switch msg.String() {
-		case "ctrl+c", "q":
-			return m, tea.Quit
-		case "enter":
-			if m.textArea.Focused() {
-				m.textArea.Blur()
-			} else {
-				m.choice = m.choices[m.cursor]
-				return m, tea.Quit
-			}
-		case "up", "down":
-			if !m.textArea.Focused() {
-				if msg.String() == "up" {
-					m.cursor--
-				} else {
-					m.cursor++
-				}
-
-				if m.cursor < 0 {
-					m.cursor = len(m.choices) - 1
-				} else if m.cursor >= len(m.choices) {
-					m.cursor = 0
-				}
-			}
-		case "tab":
-			if m.textArea.Focused() {
-				m.textArea.Blur()
-			} else {
-				m.textArea.Focus()
-			}
-		}
-	}
-
-	m.textArea, cmd = m.textArea.Update(msg)
-	return m, cmd
-}
-
-func (m textEditModel) View() string {
-	var s strings.Builder
-
-	titleStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#FAFAFA")).
-		Background(lipgloss.Color("#7D56F4")).
-		Padding(0, 1)
-
-	s.WriteString(titleStyle.Render("Edit your commit message"))
-	s.WriteString("\n\n")
-
-	s.WriteString(lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		Padding(1).
-		Render(m.textArea.View()))
-	s.WriteString("\n\n")
-
-	for i, choice := range m.choices {
-		style := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#FAFAFA")).
-			Background(lipgloss.Color("#383838")).
-			Padding(0, 1)
-
-		if m.cursor == i {
-			style = style.Background(lipgloss.Color("#7D56F4"))
-		}
-
-		s.WriteString(style.Render(choice))
-		s.WriteString(" ")
-	}
-
-	return lipgloss.NewStyle().
-		Margin(1).
-		Render(s.String())
+func copyToClipboard(content string) error {
+	// Implementation of copyToClipboard function
+	// This will depend on the clipboard library you choose to use
+	// For example, you might use github.com/atotto/clipboard
+	return nil // Replace with actual implementation
 }

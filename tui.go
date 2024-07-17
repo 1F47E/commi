@@ -102,7 +102,7 @@ func handleUserResponse(cmd *cobra.Command, args []string, commit *commit) {
 	items := []list.Item{
 		item("Commit this message"),
 		item("No"),
-		item("Redo"),
+		item("Generate another one"),
 		item("Edit"),
 	}
 
@@ -129,7 +129,7 @@ func handleUserResponse(cmd *cobra.Command, args []string, commit *commit) {
 		switch finalModel.choice {
 		case "No":
 			log.Info().Msg("Commit aborted.")
-		case "Redo":
+		case "Generate another one":
 			log.Info().Msg("Regenerating commit message...")
 			runAICommit(cmd, args)
 		case "Commit this message":
@@ -143,22 +143,128 @@ func handleUserResponse(cmd *cobra.Command, args []string, commit *commit) {
 			}
 			log.Info().Msg("Commit successfully created!")
 		case "Edit":
-			commitCommand := fmt.Sprintf("git commit -m \"%s\" -m \"%s\"", commit.Title, commit.Message)
-			fmt.Printf("Press Enter to execute: %s\n", commitCommand)
-			
-			reader := bufio.NewReader(os.Stdin)
-			_, _ = reader.ReadString('\n')
-
-			cmd := exec.Command("sh", "-c", commitCommand)
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-
-			err := cmd.Run()
+			editedCommit, err := runEditCommitMessage(commit)
 			if err != nil {
-				fmt.Printf("Error executing command: %v\n", err)
+				log.Error().Err(err).Msg("Failed to edit commit message")
+				return
+			}
+			if editedCommit != nil {
+				if err := executeGitAdd(); err != nil {
+					log.Error().Err(err).Msg("Failed to execute git add")
+					os.Exit(1)
+				}
+				if err := executeGitCommit(editedCommit.Title, editedCommit.Message); err != nil {
+					log.Error().Err(err).Msg("Failed to execute git commit")
+					os.Exit(1)
+				}
+				log.Info().Msg("Commit successfully created with edited message!")
 			} else {
-				fmt.Println("Commit executed successfully.")
+				log.Info().Msg("Edit cancelled.")
 			}
 		}
 	}
+}
+func runEditCommitMessage(commit *commit) (*commit, error) {
+	initialContent := fmt.Sprintf("%s\n\n%s", commit.Title, commit.Message)
+	
+	m := textEditModel{
+		textArea: textarea.New(),
+		choices:  []string{"Commit this", "Cancel"},
+	}
+	m.textArea.SetValue(initialContent)
+	m.textArea.Focus()
+
+	p := tea.NewProgram(m)
+	finalModel, err := p.Run()
+	if err != nil {
+		return nil, fmt.Errorf("error running text edit program: %w", err)
+	}
+
+	if finalModel, ok := finalModel.(textEditModel); ok {
+		if finalModel.choice == "Commit this" {
+			lines := strings.Split(finalModel.textArea.Value(), "\n")
+			if len(lines) < 2 {
+				return nil, fmt.Errorf("invalid commit message format")
+			}
+			return &commit{
+				Title:   lines[0],
+				Message: strings.Join(lines[2:], "\n"),
+			}, nil
+		}
+	}
+
+	return nil, nil
+}
+
+type textEditModel struct {
+	textArea textarea.Model
+	choices  []string
+	cursor   int
+	choice   string
+}
+
+func (m textEditModel) Init() tea.Cmd {
+	return textarea.Blink
+}
+
+func (m textEditModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
+
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "ctrl+c", "q":
+			return m, tea.Quit
+		case "enter":
+			if m.textArea.Focused() {
+				m.textArea.Blur()
+			} else {
+				m.choice = m.choices[m.cursor]
+				return m, tea.Quit
+			}
+		case "up", "down":
+			if !m.textArea.Focused() {
+				if msg.String() == "up" {
+					m.cursor--
+				} else {
+					m.cursor++
+				}
+
+				if m.cursor < 0 {
+					m.cursor = len(m.choices) - 1
+				} else if m.cursor >= len(m.choices) {
+					m.cursor = 0
+				}
+			}
+		case "tab":
+			if m.textArea.Focused() {
+				m.textArea.Blur()
+			} else {
+				m.textArea.Focus()
+			}
+		}
+	}
+
+	m.textArea, cmd = m.textArea.Update(msg)
+	return m, cmd
+}
+
+func (m textEditModel) View() string {
+	var s strings.Builder
+
+	s.WriteString("Edit your commit message:\n\n")
+	s.WriteString(m.textArea.View())
+	s.WriteString("\n\n")
+
+	for i, choice := range m.choices {
+		if m.cursor == i {
+			s.WriteString("> ")
+		} else {
+			s.WriteString("  ")
+		}
+		s.WriteString(choice)
+		s.WriteString("\n")
+	}
+
+	return s.String()
 }

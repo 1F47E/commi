@@ -163,8 +163,8 @@ func handleUserResponse(cmd *cobra.Command, args []string, commit *commit) {
 		commit:   commit,
 	}
 
-	p := tea.NewProgram(m, tea.WithAltScreen())
-	finalModel, err := p.Run()
+	program := tea.NewProgram(m, tea.WithAltScreen())
+	finalModel, err := program.Run()
 	if err != nil {
 		log.Error().Err(err).Msg("Error running Bubble Tea program")
 		os.Exit(1)

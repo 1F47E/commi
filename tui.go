@@ -23,21 +23,16 @@ type commit struct {
 	Message string
 }
 
-type item struct {
-	title, desc string
-}
+type menuItem string
 
-func (i item) Title() string       { return i.title }
-func (i item) Description() string { return i.desc }
-func (i item) FilterValue() string { return i.title }
+func (i menuItem) FilterValue() string { return string(i) }
 
 type tuiModel struct {
-	viewport    viewport.Model
-	list        list.Model
-	commit      *commit
-	choice      string
-	quitting    bool
-	windowWidth int
+	viewport viewport.Model
+	list     list.Model
+	commit   *commit
+	choice   string
+	quitting bool
 }
 
 func (m tuiModel) Init() tea.Cmd {
@@ -50,22 +45,26 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "ctrl+c":
+		case "ctrl+c", "q":
 			m.quitting = true
 			return m, tea.Quit
 		case "enter":
-			i, ok := m.list.SelectedItem().(item)
+			i, ok := m.list.SelectedItem().(menuItem)
 			if ok {
-				m.choice = i.title
+				m.choice = string(i)
 			}
 			return m, tea.Quit
 		}
 	case tea.WindowSizeMsg:
-		m.windowWidth = msg.Width
 		h, v := docStyle.GetFrameSize()
-		m.list.SetSize(msg.Width-h, msg.Height/2-v)
+		m.list.SetSize(msg.Width-h, msg.Height/3-v)
+		
 		m.viewport.Width = msg.Width - h
-		m.viewport.Height = msg.Height/2 - v
+		m.viewport.Height = msg.Height - m.list.Height() - v - 1
+		
+		if m.commit != nil {
+			m.viewport.SetContent(renderCommitMessage(m.commit))
+		}
 	}
 
 	var cmd tea.Cmd
@@ -79,40 +78,43 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m tuiModel) View() string {
-	return appStyle.Render(fmt.Sprintf("%s\n\n%s", m.viewport.View(), m.list.View()))
+	return fmt.Sprintf(
+		"%s\n\n%s",
+		m.viewport.View(),
+		m.list.View(),
+	)
 }
 
-func renderCommitMessage(commit *commit, width int) string {
-	title := titleStyle.Render(commit.Title)
-	return fmt.Sprintf("%s\n\n%s", title, commit.Message)
+func renderCommitMessage(commit *commit) string {
+	return fmt.Sprintf("%s\n\n%s", titleStyle.Render(commit.Title), commit.Message)
 }
 
 func handleUserResponse(cmd *cobra.Command, args []string, commit *commit) {
 	items := []list.Item{
-		item{title: "✅ Commit this message", desc: "Proceed with the generated commit message"},
-		item{title: "🔄 Generate another one", desc: "Request a new commit message"},
-		item{title: "📋 Copy to clipboard & exit", desc: "Copy the message and exit"},
-		item{title: "❌ Cancel", desc: "Abort the commit process"},
+		menuItem("✅ Commit this message"),
+		menuItem("🔄 Generate another one"),
+		menuItem("📋 Copy to clipboard & exit"),
+		menuItem("❌ Cancel"),
 	}
 
 	l := list.New(items, list.NewDefaultDelegate(), 0, 0)
 	l.Title = "Do you want to proceed with this commit message?"
+	l.SetShowStatusBar(false)
+	l.SetFilteringEnabled(false)
 
 	m := tuiModel{
-		list:   l,
-		commit: commit,
+		list:     l,
+		commit:   commit,
+		viewport: viewport.New(0, 0),
 	}
+
+	m.viewport.SetContent(renderCommitMessage(commit))
 
 	p := tea.NewProgram(m, tea.WithAltScreen())
 
-	go func() {
-		renderedContent := renderCommitMessage(commit, m.windowWidth)
-		p.Send(setContentMsg(renderedContent))
-	}()
-
 	finalModel, err := p.Run()
 	if err != nil {
-		log.Error().Msg(fmt.Sprintf("Error running Bubble Tea program: %v", err))
+		log.Error().Err(err).Msg("Error running Bubble Tea program")
 		os.Exit(1)
 	}
 
@@ -125,26 +127,24 @@ func handleUserResponse(cmd *cobra.Command, args []string, commit *commit) {
 			runAICommit(cmd, args)
 		case "✅ Commit this message":
 			if err := executeGitAdd(); err != nil {
-				log.Error().Msg(fmt.Sprintf("Failed to execute git add: %v", err))
+				log.Error().Err(err).Msg("Failed to execute git add")
 				os.Exit(1)
 			}
 			if err := executeGitCommit(commit.Title, commit.Message); err != nil {
-				log.Error().Msg(fmt.Sprintf("Failed to execute git commit: %v", err))
+				log.Error().Err(err).Msg("Failed to execute git commit")
 				os.Exit(1)
 			}
 			log.Info().Msg("Commit successfully created!")
 		case "📋 Copy to clipboard & exit":
 			content := fmt.Sprintf("%s\n\n%s", commit.Title, commit.Message)
 			if err := copyToClipboard(content); err != nil {
-				log.Error().Msg(fmt.Sprintf("Failed to copy to clipboard: %v", err))
+				log.Error().Err(err).Msg("Failed to copy to clipboard")
 			} else {
 				log.Info().Msg("Commit message copied to clipboard.")
 			}
 		}
 	}
 }
-
-type setContentMsg string
 func copyToClipboard(content string) error {
 	// Implementation of copyToClipboard function
 	// This will depend on the clipboard library you choose to use

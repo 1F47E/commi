@@ -78,7 +78,6 @@ func executeGitAdd() error {
 	if err != nil {
 		return fmt.Errorf("git add failed: %v\nOutput: %s", err, string(output))
 	}
-	log.Info().Msg("Git add executed successfully")
 	return nil
 }
 
@@ -88,6 +87,5 @@ func executeGitCommit(title, message string) error {
 	if err != nil {
 		return fmt.Errorf("git commit failed: %v\nOutput: %s", err, string(output))
 	}
-	log.Info().Msg("Git commit executed successfully")
 	return nil
 }

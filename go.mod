@@ -1,4 +1,4 @@
-module ai-commit
+module commi
 
 go 1.21.4
 

@@ -16,6 +16,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const viewportWidth = 80
+
 type commit struct {
 	Title   string
 	Message string
@@ -130,10 +132,18 @@ func handleUserResponse(cmd *cobra.Command, args []string, commit *commit) {
 	l.Styles.PaginationStyle = paginationStyle
 	l.Styles.HelpStyle = helpStyle
 
-	content := fmt.Sprintf("**%s**\n\n%s", commit.Title, commit.Message)
-	renderedContent, _ := glamour.Render(content, "dark")
+	content := fmt.Sprintf("# %s\n\n%s", commit.Title, commit.Message)
+	renderer, _ := glamour.NewTermRenderer(
+		glamour.WithAutoStyle(),
+		glamour.WithWordWrap(viewportWidth),
+	)
+	renderedContent, _ := renderer.Render(content)
 
-	vp := viewport.New(defaultWidth, 20)
+	vp := viewport.New(viewportWidth, 20)
+	vp.Style = lipgloss.NewStyle().
+		BorderStyle(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("62")).
+		PaddingRight(2)
 	vp.SetContent(renderedContent)
 
 	m := tuiModel{

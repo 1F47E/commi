@@ -163,7 +163,7 @@ func handleUserResponse(cmd *cobra.Command, args []string, commit *commit) {
 		}
 	}
 }
-func runEditCommitMessage(commit *Commit) (*Commit, error) {
+func runEditCommitMessage(commit *commit) (*commit, error) {
 	initialContent := fmt.Sprintf("%s\n\n%s", commit.Title, commit.Message)
 	
 	m := textEditModel{
@@ -185,7 +185,7 @@ func runEditCommitMessage(commit *Commit) (*Commit, error) {
 			if len(lines) < 2 {
 				return nil, fmt.Errorf("invalid commit message format")
 			}
-			return &Commit{
+			return &commit{
 				Title:   lines[0],
 				Message: strings.TrimSpace(strings.Join(lines[1:], "\n")),
 			}, nil

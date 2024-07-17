@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -13,7 +14,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var docStyle = lipgloss.NewStyle().Margin(1, 2)
+var (
+	docStyle = lipgloss.NewStyle().Margin(1, 2)
+	appStyle = lipgloss.NewStyle().Padding(1, 2, 1, 2)
+)
 
 const minViewportHeight = 10
 
@@ -31,11 +35,12 @@ func (i item) Description() string { return i.desc }
 func (i item) FilterValue() string { return i.title }
 
 type tuiModel struct {
-	viewport viewport.Model
-	list     list.Model
-	commit   *commit
-	choice   string
-	quitting bool
+	viewport    viewport.Model
+	list        list.Model
+	commit      *commit
+	choice      string
+	quitting    bool
+	windowWidth int
 }
 
 func (m tuiModel) Init() tea.Cmd {
@@ -59,10 +64,11 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 	case tea.WindowSizeMsg:
+		m.windowWidth = msg.Width
 		h, v := docStyle.GetFrameSize()
-		m.list.SetSize(msg.Width-h, msg.Height-v)
+		m.list.SetSize(msg.Width-h, msg.Height/2-v)
 		m.viewport.Width = msg.Width - h
-		m.viewport.Height = msg.Height - v - 6 // Subtract 6 for the list title and pagination
+		m.viewport.Height = msg.Height/2 - v
 	}
 
 	var cmd tea.Cmd
@@ -76,7 +82,19 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m tuiModel) View() string {
-	return docStyle.Render(fmt.Sprintf("%s\n\n%s", m.viewport.View(), m.list.View()))
+	return appStyle.Render(fmt.Sprintf("%s\n\n%s", m.viewport.View(), m.list.View()))
+}
+
+func renderCommitMessage(commit *commit, width int) (string, error) {
+	content := fmt.Sprintf("# %s\n\n%s", commit.Title, commit.Message)
+	renderer, err := glamour.NewTermRenderer(
+		glamour.WithAutoStyle(),
+		glamour.WithWordWrap(width),
+	)
+	if err != nil {
+		return "", err
+	}
+	return renderer.Render(content)
 }
 
 func handleUserResponse(cmd *cobra.Command, args []string, commit *commit) {
@@ -87,27 +105,27 @@ func handleUserResponse(cmd *cobra.Command, args []string, commit *commit) {
 		item{title: "❌ Cancel", desc: "Abort the commit process"},
 	}
 
-	content := fmt.Sprintf("# %s\n\n%s", commit.Title, commit.Message)
-
-	renderer, _ := glamour.NewTermRenderer(
-		glamour.WithAutoStyle(),
-		glamour.WithWordWrap(80), // Set a default width, it will be adjusted later
-	)
-	renderedContent, _ := renderer.Render(content)
-
-	vp := viewport.New(80, minViewportHeight)
-	vp.SetContent(renderedContent)
-
 	l := list.New(items, list.NewDefaultDelegate(), 0, 0)
 	l.Title = "Do you want to proceed with this commit message?"
 
 	m := tuiModel{
-		viewport: vp,
-		list:     l,
-		commit:   commit,
+		list:   l,
+		commit: commit,
 	}
 
 	p := tea.NewProgram(m, tea.WithAltScreen())
+
+	go func() {
+		for {
+			renderedContent, err := renderCommitMessage(commit, m.windowWidth)
+			if err != nil {
+				log.Error().Msg(fmt.Sprintf("Error rendering commit message: %v", err))
+				return
+			}
+			p.Send(setContentMsg(renderedContent))
+			time.Sleep(time.Millisecond * 100)
+		}
+	}()
 
 	finalModel, err := p.Run()
 	if err != nil {
@@ -141,6 +159,13 @@ func handleUserResponse(cmd *cobra.Command, args []string, commit *commit) {
 			}
 		}
 	}
+}
+
+type setContentMsg string
+
+func (m tuiModel) updateContent(content string) (tuiModel, tea.Cmd) {
+	m.viewport.SetContent(content)
+	return m, nil
 }
 func copyToClipboard(content string) error {
 	// Implementation of copyToClipboard function

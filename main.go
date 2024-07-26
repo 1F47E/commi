@@ -116,13 +116,15 @@ func getClient() (llm.LLMClient, error) {
 }
 
 func generateCommitMessage(client llm.LLMClient, status, diffs, subject string) (*commit.Commit, error) {
-	modelName := getModelName(client)
-	log.Debug().Str("model", modelName).Msg("Using AI model for commit message generation")
-
 	spinner := NewSpinner()
 	spinner.Start("Generating commit message...")
 
-	xmlContent, err := client.GenerateCommitMessage(status, diffs, subject)
+	sys := llm.SystemPrompt
+	if os.Getenv("USE_EMOJI") != "" {
+		sys += "\n• Feel free to use emojis in the commit messages where appropriate to enhance readability and convey the nature of the changes."
+	}
+
+	xmlContent, err := client.GenerateCommitMessage(sys, status, diffs, subject)
 
 	spinner.Stop()
 
@@ -131,17 +133,6 @@ func generateCommitMessage(client llm.LLMClient, status, diffs, subject string) 
 	}
 
 	return xmlparser.ParseXMLCommit(xmlContent)
-}
-
-func getModelName(client llm.LLMClient) string {
-	switch client.(type) {
-	case *llm.AnthropicClient:
-		return "Anthropic Claude"
-	case *llm.OpenAIClient:
-		return "OpenAI GPT-4"
-	default:
-		return "Unknown Model"
-	}
 }
 
 func applyCommit(c *commit.Commit) error {

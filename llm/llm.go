@@ -35,7 +35,7 @@ func truncatePrompt(prompt string, maxTokens int) string {
 }
 
 type LLMClient interface {
-	GenerateCommitMessage(status, diffs, subject string) (string, error)
+	GenerateCommitMessage(systemPrompt, status, diffs, subject string) (string, error)
 }
 
 // OpenAI Client
@@ -52,7 +52,7 @@ func NewOpenAIClient(apiKey string) *OpenAIClient {
 	}
 }
 
-func (c *OpenAIClient) GenerateCommitMessage(status, diffs, subject string) (string, error) {
+func (c *OpenAIClient) GenerateCommitMessage(sysPrompt, status, diffs, subject string) (string, error) {
 	prompt := fmt.Sprintf("Git status:\n\n%s\n\nGit diffs:\n\n%s\n\nBased on this information, generate a good and descriptive commit message in XML format:", status, diffs)
 	if subject != "" {
 		prompt += fmt.Sprintf("\n\nPlease focus on the following subject in your commit message: %s", subject)
@@ -65,7 +65,7 @@ func (c *OpenAIClient) GenerateCommitMessage(status, diffs, subject string) (str
 		"messages": []map[string]string{
 			{
 				"role":    "system",
-				"content": SystemPrompt,
+				"content": sysPrompt,
 			},
 			{
 				"role":    "user",
@@ -133,7 +133,7 @@ func NewAnthropicClient(apiKey string) *AnthropicClient {
 	}
 }
 
-func (c *AnthropicClient) GenerateCommitMessage(status, diffs, subject string) (string, error) {
+func (c *AnthropicClient) GenerateCommitMessage(sysPrompt, status, diffs, subject string) (string, error) {
 	prompt := fmt.Sprintf("Git status:\n\n%s\n\nGit diffs:\n\n%s\n\nBased on this information, generate a good and descriptive commit message in XML format:", status, diffs)
 	if subject != "" {
 		prompt += fmt.Sprintf("\n\nPlease focus on the following subject in your commit message: %s", subject)
@@ -151,7 +151,7 @@ func (c *AnthropicClient) GenerateCommitMessage(status, diffs, subject string) (
 				},
 			},
 		},
-		"system": SystemPrompt,
+		"system": sysPrompt,
 	})
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal request body: %v", err)

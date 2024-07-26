@@ -120,8 +120,8 @@ func generateCommitMessage(client llm.LLMClient, status, diffs, subject string) 
 	spinner.Start("Generating commit message...")
 
 	sys := llm.SystemPrompt
-	if os.Getenv("USE_EMOJI") != "" {
-		sys += "\n• Feel free to use emojis in the commit messages where appropriate to enhance readability and convey the nature of the changes."
+	if _, exists := os.LookupEnv("DISABLE_EMOJI"); !exists {
+		sys += "\n• Please follow the gitmoji standard (https://gitmoji.dev/) and feel free to use emojis in the commit messages where appropriate to enhance readability and convey the nature of the changes."
 	}
 
 	xmlContent, err := client.GenerateCommitMessage(sys, status, diffs, subject)

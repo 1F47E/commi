@@ -34,8 +34,36 @@ func truncatePrompt(prompt string, maxTokens int) string {
 	return prompt
 }
 
+import (
+	"encoding/xml"
+	"strings"
+)
+
 type LLMClient interface {
 	GenerateCommitMessage(status, diffs string) (*commit, error)
+}
+
+type xmlCommit struct {
+	XMLName xml.Name `xml:"commit"`
+	Title   string   `xml:"title"`
+	Changes struct {
+		Items []string `xml:"change"`
+	} `xml:"changes"`
+	Summary string `xml:"summary"`
+}
+
+func parseXMLCommit(xmlContent string) (*commit, error) {
+	var xmlCommit xmlCommit
+	if err := xml.Unmarshal([]byte(xmlContent), &xmlCommit); err != nil {
+		return nil, fmt.Errorf("failed to parse XML: %v", err)
+	}
+
+	message := strings.Join(xmlCommit.Changes.Items, "\n") + "\n\n" + xmlCommit.Summary
+
+	return &commit{
+		Title:   xmlCommit.Title,
+		Message: message,
+	}, nil
 }
 
 // OpenAI Client
@@ -53,7 +81,7 @@ func NewOpenAIClient(apiKey string) *OpenAIClient {
 }
 
 func (c *OpenAIClient) GenerateCommitMessage(status, diffs string) (*commit, error) {
-	prompt := fmt.Sprintf("Git status:\n\n%s\n\nGit diffs:\n\n%s\n\nBased on this information, generate a good and descriptive commit message:", status, diffs)
+	prompt := fmt.Sprintf("Git status:\n\n%s\n\nGit diffs:\n\n%s\n\nBased on this information, generate a good and descriptive commit message in XML format:", status, diffs)
 	prompt = truncatePrompt(prompt, maxTokens)
 
 	requestBody, err := json.Marshal(map[string]interface{}{
@@ -113,16 +141,7 @@ func (c *OpenAIClient) GenerateCommitMessage(status, diffs string) (*commit, err
 	}
 
 	content := strings.TrimSpace(response.Choices[0].Message.Content)
-	lines := strings.SplitN(content, "\n", 2)
-
-	if len(lines) < 2 {
-		return nil, fmt.Errorf("invalid commit message format")
-	}
-
-	return &commit{
-		Title:   strings.TrimSpace(lines[0]),
-		Message: strings.TrimSpace(lines[1]),
-	}, nil
+	return parseXMLCommit(content)
 }
 
 // Anthropic Client
@@ -140,7 +159,7 @@ func NewAnthropicClient(apiKey string) *AnthropicClient {
 }
 
 func (c *AnthropicClient) GenerateCommitMessage(status, diffs string) (*commit, error) {
-	prompt := fmt.Sprintf("Git status:\n\n%s\n\nGit diffs:\n\n%s\n\n", status, diffs)
+	prompt := fmt.Sprintf("Git status:\n\n%s\n\nGit diffs:\n\n%s\n\nBased on this information, generate a good and descriptive commit message in XML format:", status, diffs)
 	prompt = truncatePrompt(prompt, maxTokens)
 
 	requestBody, err := json.Marshal(map[string]interface{}{
@@ -204,16 +223,5 @@ func (c *AnthropicClient) GenerateCommitMessage(status, diffs string) (*commit, 
 	text := result.Content[0].Text
 	log.Debug().Msg(fmt.Sprintf("Response text:\n%s", text))
 
-	lines := strings.SplitN(text, "\n", 2)
-	if len(lines) < 2 {
-		return nil, fmt.Errorf("invalid commit message format")
-	}
-
-	commitData := &commit{
-		Title:   strings.TrimSpace(lines[0]),
-		Message: strings.TrimSpace(lines[1]),
-	}
-	log.Debug().Msg(fmt.Sprintf("Commit data:\n%v", commitData))
-
-	return commitData, nil
+	return parseXMLCommit(text)
 }

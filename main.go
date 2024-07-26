@@ -14,6 +14,9 @@ import (
 // version is set during build
 var version string
 
+// errorLoggingOnly is set during build
+var errorLoggingOnly string
+
 // ===== ROOT COMMAND
 
 var rootCmd = &cobra.Command{
@@ -32,6 +35,14 @@ func init() {
 		TimeFormat: "",
 		NoColor:    false,
 	}
+	
+	// Set log level based on the errorLoggingOnly flag
+	if errorLoggingOnly == "true" {
+		zerolog.SetGlobalLevel(zerolog.ErrorLevel)
+	} else {
+		zerolog.SetGlobalLevel(zerolog.DebugLevel)
+	}
+	
 	log.Logger = log.Output(output)
 }
 

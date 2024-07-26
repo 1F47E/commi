@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"io"
 	"net/http"
@@ -33,11 +34,6 @@ func truncatePrompt(prompt string, maxTokens int) string {
 
 	return prompt
 }
-
-import (
-	"encoding/xml"
-	"strings"
-)
 
 type LLMClient interface {
 	GenerateCommitMessage(status, diffs string) (*commit, error)

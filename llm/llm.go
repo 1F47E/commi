@@ -1,9 +1,8 @@
-package main
+package llm
 
 import (
 	"bytes"
 	"encoding/json"
-	"encoding/xml"
 	"fmt"
 	"io"
 	"net/http"
@@ -36,30 +35,7 @@ func truncatePrompt(prompt string, maxTokens int) string {
 }
 
 type LLMClient interface {
-	GenerateCommitMessage(status, diffs string) (*commit, error)
-}
-
-type xmlCommit struct {
-	XMLName xml.Name `xml:"commit"`
-	Title   string   `xml:"title"`
-	Changes struct {
-		Items []string `xml:"change"`
-	} `xml:"changes"`
-	Summary string `xml:"summary"`
-}
-
-func parseXMLCommit(xmlContent string) (*commit, error) {
-	var xmlCommit xmlCommit
-	if err := xml.Unmarshal([]byte(xmlContent), &xmlCommit); err != nil {
-		return nil, fmt.Errorf("failed to parse XML: %v", err)
-	}
-
-	message := strings.Join(xmlCommit.Changes.Items, "\n") + "\n\n" + xmlCommit.Summary
-
-	return &commit{
-		Title:   xmlCommit.Title,
-		Message: message,
-	}, nil
+	GenerateCommitMessage(status, diffs, subject string) (string, error)
 }
 
 // OpenAI Client
@@ -76,8 +52,11 @@ func NewOpenAIClient(apiKey string) *OpenAIClient {
 	}
 }
 
-func (c *OpenAIClient) GenerateCommitMessage(status, diffs string) (*commit, error) {
+func (c *OpenAIClient) GenerateCommitMessage(status, diffs, subject string) (string, error) {
 	prompt := fmt.Sprintf("Git status:\n\n%s\n\nGit diffs:\n\n%s\n\nBased on this information, generate a good and descriptive commit message in XML format:", status, diffs)
+	if subject != "" {
+		prompt += fmt.Sprintf("\n\nPlease focus on the following subject in your commit message: %s", subject)
+	}
 	prompt = truncatePrompt(prompt, maxTokens)
 
 	requestBody, err := json.Marshal(map[string]interface{}{
@@ -95,12 +74,12 @@ func (c *OpenAIClient) GenerateCommitMessage(status, diffs string) (*commit, err
 		},
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request body: %v", err)
+		return "", fmt.Errorf("failed to marshal request body: %v", err)
 	}
 
 	req, err := http.NewRequest("POST", c.url, bytes.NewBuffer(requestBody))
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %v", err)
+		return "", fmt.Errorf("failed to create request: %v", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -111,13 +90,13 @@ func (c *OpenAIClient) GenerateCommitMessage(status, diffs string) (*commit, err
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to send request: %v", err)
+		return "", fmt.Errorf("failed to send request: %v", err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %v", err)
+		return "", fmt.Errorf("failed to read response body: %v", err)
 	}
 
 	var response struct {
@@ -129,15 +108,15 @@ func (c *OpenAIClient) GenerateCommitMessage(status, diffs string) (*commit, err
 	}
 
 	if err := json.Unmarshal(body, &response); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal response: %v", err)
+		return "", fmt.Errorf("failed to unmarshal response: %v", err)
 	}
 
 	if len(response.Choices) == 0 {
-		return nil, fmt.Errorf("no choices in response")
+		return "", fmt.Errorf("no choices in response")
 	}
 
 	content := strings.TrimSpace(response.Choices[0].Message.Content)
-	return parseXMLCommit(content)
+	return content, nil
 }
 
 // Anthropic Client
@@ -154,8 +133,11 @@ func NewAnthropicClient(apiKey string) *AnthropicClient {
 	}
 }
 
-func (c *AnthropicClient) GenerateCommitMessage(status, diffs string) (*commit, error) {
+func (c *AnthropicClient) GenerateCommitMessage(status, diffs, subject string) (string, error) {
 	prompt := fmt.Sprintf("Git status:\n\n%s\n\nGit diffs:\n\n%s\n\nBased on this information, generate a good and descriptive commit message in XML format:", status, diffs)
+	if subject != "" {
+		prompt += fmt.Sprintf("\n\nPlease focus on the following subject in your commit message: %s", subject)
+	}
 	prompt = truncatePrompt(prompt, maxTokens)
 
 	requestBody, err := json.Marshal(map[string]interface{}{
@@ -172,12 +154,12 @@ func (c *AnthropicClient) GenerateCommitMessage(status, diffs string) (*commit, 
 		"system": SystemPrompt,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request body: %v", err)
+		return "", fmt.Errorf("failed to marshal request body: %v", err)
 	}
 
 	req, err := http.NewRequest("POST", c.url, bytes.NewBuffer(requestBody))
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %v", err)
+		return "", fmt.Errorf("failed to create request: %v", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -189,17 +171,17 @@ func (c *AnthropicClient) GenerateCommitMessage(status, diffs string) (*commit, 
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to send request: %v", err)
+		return "", fmt.Errorf("failed to send request: %v", err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %v", err)
+		return "", fmt.Errorf("failed to read response body: %v", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("API request failed with status code %d: %s", resp.StatusCode, string(body))
+		return "", fmt.Errorf("API request failed with status code %d: %s", resp.StatusCode, string(body))
 	}
 	log.Debug().Msg(fmt.Sprintf("Response body:\n%s", string(body)))
 
@@ -209,15 +191,15 @@ func (c *AnthropicClient) GenerateCommitMessage(status, diffs string) (*commit, 
 		} `json:"content"`
 	}
 	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal response: %v", err)
+		return "", fmt.Errorf("failed to unmarshal response: %v", err)
 	}
 
 	if len(result.Content) == 0 {
-		return nil, fmt.Errorf("unexpected response format")
+		return "", fmt.Errorf("unexpected response format")
 	}
 
 	text := result.Content[0].Text
 	log.Debug().Msg(fmt.Sprintf("Response text:\n%s", text))
 
-	return parseXMLCommit(text)
+	return text, nil
 }

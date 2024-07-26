@@ -1,6 +1,7 @@
 package main
 
 import (
+	"commi/commit"
 	"fmt"
 	"io"
 	"os"
@@ -35,7 +36,7 @@ const (
 )
 
 type item struct {
-	title string
+	title  string
 	action MenuAction
 }
 
@@ -66,14 +67,9 @@ func (d itemDelegate) Render(w io.Writer, m list.Model, index int, listItem list
 
 type model struct {
 	list     list.Model
-	commit   *commit
+	commit   *commit.Commit
 	choice   MenuAction
 	quitting bool
-}
-
-type commit struct {
-	Title   string
-	Message string
 }
 
 func (m model) Init() tea.Cmd {
@@ -115,11 +111,11 @@ func (m model) View() string {
 	return fmt.Sprintf("%s\n\n%s", commitMessage, m.list.View())
 }
 
-func renderCommitMessage(commit *commit) string {
+func renderCommitMessage(commit *commit.Commit) string {
 	return fmt.Sprintf("%s\n\n%s", commit.Title, commit.Message)
 }
 
-func handleUserResponse(cmd *cobra.Command, args []string, commit *commit) {
+func handleUserResponse(cmd *cobra.Command, args []string, commit *commit.Commit) {
 	items := []list.Item{
 		item{title: "✅ Commit this", action: CommitThis},
 		item{title: "📋 Copy to clipboard and exit", action: CopyToClipboard},

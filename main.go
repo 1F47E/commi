@@ -34,6 +34,7 @@ var rootCmd = &cobra.Command{
 func init() {
 	rootCmd.Flags().BoolP("version", "v", false, "Display version information")
 	rootCmd.Flags().BoolP("auto", "a", false, "Automatically commit without dialog")
+	rootCmd.Flags().BoolP("force", "f", false, "Force commit without showing the menu")
 
 	// Configure zerolog
 	output := zerolog.ConsoleWriter{
@@ -88,8 +89,11 @@ func runAICommit(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
+	forceFlag, _ := cmd.Flags().GetBool("force")
 	autoFlag, _ := cmd.Flags().GetBool("auto")
-	if autoFlag {
+	if forceFlag {
+		handleForcedCommit(commitMessage)
+	} else if autoFlag {
 		err = applyCommit(commitMessage)
 		if err != nil {
 			log.Error().Err(err).Msg("Failed to apply commit")
@@ -99,6 +103,16 @@ func runAICommit(cmd *cobra.Command, args []string) {
 	} else {
 		handleUserResponse(cmd, args, commitMessage)
 	}
+}
+
+func handleForcedCommit(commitMessage *commit.Commit) {
+	err := applyCommit(commitMessage)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to apply commit")
+		os.Exit(1)
+	}
+	fmt.Printf("Commit applied: %s\n", commitMessage.Title)
+	os.Exit(0)
 }
 
 func getClient() (llm.LLMClient, error) {
@@ -136,11 +150,19 @@ func generateCommitMessage(client llm.LLMClient, status, diffs, subject string) 
 }
 
 func applyCommit(c *commit.Commit) error {
+	// Stage all changes
+	stageCmd := exec.Command("git", "add", "-A")
+	stageOutput, stageErr := stageCmd.CombinedOutput()
+	if stageErr != nil {
+		return fmt.Errorf("failed to stage changes: %v\nOutput: %s", stageErr, string(stageOutput))
+	}
+
+	// Commit the staged changes
 	message := c.Title
-	cmd := exec.Command("git", "commit", "-m", message)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("failed to apply commit: %v\nOutput: %s", err, string(output))
+	commitCmd := exec.Command("git", "commit", "-m", message)
+	commitOutput, commitErr := commitCmd.CombinedOutput()
+	if commitErr != nil {
+		return fmt.Errorf("failed to apply commit: %v\nOutput: %s", commitErr, string(commitOutput))
 	}
 	return nil
 }

@@ -1,4 +1,4 @@
-package main
+package tui
 
 import (
 	"fmt"
@@ -11,9 +11,9 @@ import (
 )
 
 type Spinner struct {
-	program  *tea.Program
-	model    spinnerModel
-	doneChan chan struct{}
+	program   *tea.Program
+	model     spinnerModel
+	doneChan  chan struct{}
 	startTime time.Time
 }
 
@@ -30,13 +30,13 @@ func NewSpinner() *Spinner {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
-	
+
 	model := spinnerModel{
 		spinner: s,
 		state:   "idle",
 		text:    "Initializing...",
 	}
-	
+
 	return &Spinner{
 		model:    model,
 		doneChan: make(chan struct{}),
@@ -47,7 +47,7 @@ func (s *Spinner) Start(message string) {
 	s.model.state = "running"
 	s.model.text = message
 	s.startTime = time.Now()
-	
+
 	s.program = tea.NewProgram(s.model)
 	go func() {
 		if _, err := s.program.Run(); err != nil {

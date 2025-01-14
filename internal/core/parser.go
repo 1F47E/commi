@@ -1,13 +1,11 @@
-package xmlparser
+package core
 
 import (
-	"commi/commit"
 	"encoding/xml"
-	"fmt"
 	"strings"
 )
 
-type XMLCommit struct {
+type xmlCommit struct {
 	XMLName xml.Name `xml:"commit"`
 	Title   string   `xml:"title"`
 	Changes struct {
@@ -16,10 +14,13 @@ type XMLCommit struct {
 	Summary string `xml:"summary"`
 }
 
-func ParseXMLCommit(xmlContent string) (*commit.Commit, error) {
-	var xmlCommit XMLCommit
+func (c *Core) parseCommitMessage(xmlContent string) (*CommitMessage, error) {
+	var xmlCommit xmlCommit
 	if err := xml.Unmarshal([]byte(xmlContent), &xmlCommit); err != nil {
-		return nil, fmt.Errorf("failed to parse XML: %v", err)
+		return nil, &ErrParsingCommit{
+			Msg: "invalid XML format",
+			Err: err,
+		}
 	}
 
 	message := strings.Join(xmlCommit.Changes.Items, "\n")
@@ -30,7 +31,7 @@ func ParseXMLCommit(xmlContent string) (*commit.Commit, error) {
 	}
 	message += summary
 
-	return &commit.Commit{
+	return &CommitMessage{
 		Title:   xmlCommit.Title,
 		Message: strings.TrimSpace(message),
 	}, nil

@@ -1,4 +1,4 @@
-package main
+package git
 
 import (
 	"fmt"
@@ -8,20 +8,20 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-func getGitInfo() (string, string, error) {
-	status, err := getGitStatus()
+func GetGitInfo() (string, string, error) {
+	status, err := GetGitStatus()
 	if err != nil {
 		return "", "", fmt.Errorf("failed to get git status: %w", err)
 	}
 
-	files, err := getChangedFiles(status)
+	files, err := GetChangedFiles(status)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to get changed files: %w", err)
 	}
 
 	diffs := ""
 	for _, file := range files {
-		diff, err := getGitDiff(file)
+		diff, err := GetGitDiff(file)
 		if err != nil {
 			log.Warn().Err(err).Str("file", file).Msg("Failed to get diff for file")
 			continue
@@ -32,7 +32,7 @@ func getGitInfo() (string, string, error) {
 	return status, diffs, nil
 }
 
-func getGitStatus() (string, error) {
+func GetGitStatus() (string, error) {
 	cmd := exec.Command("git", "status", "--porcelain")
 	output, err := cmd.Output()
 	if err != nil {
@@ -47,7 +47,7 @@ func getGitStatus() (string, error) {
 	return string(output), nil
 }
 
-func getChangedFiles(status string) ([]string, error) {
+func GetChangedFiles(status string) ([]string, error) {
 	lines := strings.Split(status, "\n")
 	var files []string
 	for _, line := range lines {
@@ -63,7 +63,7 @@ func getChangedFiles(status string) ([]string, error) {
 	return files, nil
 }
 
-func getGitDiff(file string) (string, error) {
+func GetGitDiff(file string) (string, error) {
 	cmd := exec.Command("git", "--no-pager", "diff", file)
 	output, err := cmd.Output()
 	if err != nil {
@@ -72,7 +72,7 @@ func getGitDiff(file string) (string, error) {
 	return string(output), nil
 }
 
-func executeGitAdd() error {
+func ExecuteGitAdd() error {
 	cmd := exec.Command("git", "add", ".")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -81,7 +81,7 @@ func executeGitAdd() error {
 	return nil
 }
 
-func executeGitCommit(title, message string) error {
+func ExecuteGitCommit(title, message string) error {
 	cmd := exec.Command("git", "commit", "-m", title, "-m", message)
 	output, err := cmd.CombinedOutput()
 	if err != nil {

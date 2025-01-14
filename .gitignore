@@ -46,5 +46,3 @@ tmp/
 # If you're using a local .env file
 .env
 
-.aider*
-aider.sh

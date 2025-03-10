@@ -6,9 +6,27 @@ COMMI is your git commit friend.
 
 ## Installation
 
-### From Source
+### Using the Installation Script (Recommended)
 
-To install COMMI from source:
+The easiest way to install COMMI is by using the provided installation script:
+
+```bash
+# Clone the repository
+git clone https://github.com/user/commi.git
+cd commi
+
+# Run the installation script
+./install.sh
+```
+
+This script will:
+- Build COMMI from source with proper versioning
+- Install it to `/usr/local/bin/` (requires sudo permission)
+- Make it executable
+
+### Manual Installation from Source
+
+Alternatively, you can manually build and install COMMI:
 
 ```bash
 # Clone the repository

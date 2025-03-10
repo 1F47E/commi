@@ -1,7 +1,10 @@
 package main
 
 import (
+	"commi/internal/clients/anthropic"
+	"commi/internal/clients/openai"
 	"commi/internal/config"
+	"commi/internal/core"
 	"commi/internal/tui"
 	"fmt"
 	"os"
@@ -24,7 +27,7 @@ var errorLoggingOnly string
 var rootCmd = &cobra.Command{
 	Use:     "commi [subject]",
 	Short:   "Generate and apply AI-powered commit messages",
-	Run:     tui.Run,
+	Run:     runCommand,
 	Version: version,
 	Args:    cobra.MaximumNArgs(1),
 }
@@ -49,6 +52,37 @@ func init() {
 	}
 
 	log.Logger = log.Output(output)
+}
+
+func getProvider() (config.LLMProvider, error) {
+	// Try to initialize Anthropic client first
+	if key := os.Getenv("ANTHROPIC_API_KEY"); key != "" {
+		log.Debug().Msg("Using Anthropic as LLM provider")
+		return anthropic.NewAnthropicClient(config.LLMConfig{APIKey: key}), nil
+	}
+
+	// Try OpenAI client second
+	if key := os.Getenv("OPENAI_API_KEY"); key != "" {
+		log.Debug().Msg("Using OpenAI as LLM provider")
+		return openai.NewOpenAIClient(config.LLMConfig{APIKey: key}), nil
+	}
+
+	return nil, fmt.Errorf("no LLM providers available. Please set either ANTHROPIC_API_KEY or OPENAI_API_KEY environment variable")
+}
+
+func runCommand(cmd *cobra.Command, args []string) {
+	if versionFlag, _ := cmd.Flags().GetBool("version"); versionFlag {
+		fmt.Println(cmd.Version)
+		return
+	}
+
+	provider, err := getProvider()
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to initialize LLM provider")
+	}
+
+	c := core.NewCore(provider)
+	tui.Run(cmd, args, c)
 }
 
 func main() {

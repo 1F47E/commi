@@ -3,6 +3,8 @@ package core
 import (
 	"context"
 	"errors"
+	"fmt"
+	"os"
 )
 
 var (
@@ -18,13 +20,17 @@ type Core struct {
 	llm LLMProvider
 }
 
-func New(llm LLMProvider) *Core {
+func NewCore(llm LLMProvider) *Core {
 	if llm == nil {
 		panic("llm provider cannot be nil")
 	}
 	return &Core{
 		llm: llm,
 	}
+}
+
+func (c *Core) IsDebug() bool {
+	return os.Getenv("DEBUG") != ""
 }
 
 type CommitMessage struct {
@@ -51,10 +57,7 @@ func (o *GenerateOptions) validate() error {
 
 func (c *Core) GenerateCommit(ctx context.Context, opts GenerateOptions) (*CommitMessage, error) {
 	if err := opts.validate(); err != nil {
-		return nil, &ErrGeneratingCommit{
-			Msg: "invalid options",
-			Err: err,
-		}
+		return nil, fmt.Errorf("invalid options: %w", err)
 	}
 
 	xmlContent, err := c.llm.GenerateCommitMessage(
@@ -65,18 +68,12 @@ func (c *Core) GenerateCommit(ctx context.Context, opts GenerateOptions) (*Commi
 		opts.Subject,
 	)
 	if err != nil {
-		return nil, &ErrGeneratingCommit{
-			Msg: "llm provider failed",
-			Err: err,
-		}
+		return nil, fmt.Errorf("llm provider failed: %w", err)
 	}
 
-	commit, err := c.parseCommitMessage(xmlContent)
+	commit, err := parseCommitMessage(xmlContent)
 	if err != nil {
-		return nil, &ErrGeneratingCommit{
-			Msg: "failed to parse llm response",
-			Err: err,
-		}
+		return nil, fmt.Errorf("failed to parse llm response: %w", err)
 	}
 
 	return commit, nil

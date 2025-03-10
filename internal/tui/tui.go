@@ -1,12 +1,9 @@
 package tui
 
 import (
-	"commi/internal/config"
+	"commi/internal/core"
 	"commi/internal/git"
-	"commi/internal/llm"
-	"commi/internal/llm/anthropic"
-	"commi/internal/llm/openai"
-	"commi/internal/xmlparser"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -73,7 +70,7 @@ func (d itemDelegate) Render(w io.Writer, m list.Model, index int, listItem list
 
 type model struct {
 	list     list.Model
-	commit   *xmlparser.Commit
+	commit   *Commit
 	choice   MenuAction
 	quitting bool
 }
@@ -117,11 +114,11 @@ func (m model) View() string {
 	return fmt.Sprintf("%s\n\n%s", commitMessage, m.list.View())
 }
 
-func renderCommitMessage(commit *xmlparser.Commit) string {
+func renderCommitMessage(commit *Commit) string {
 	return fmt.Sprintf("%s\n\n%s", commit.Title, commit.Message)
 }
 
-func handleUserResponse(cmd *cobra.Command, args []string, commit *xmlparser.Commit) {
+func handleUserResponse(cmd *cobra.Command, args []string, commit *Commit, c *core.Core) {
 	items := []list.Item{
 		item{title: "✅ Commit this", action: CommitThis},
 		item{title: "📋 Copy to clipboard and exit", action: CopyToClipboard},
@@ -171,7 +168,7 @@ func handleUserResponse(cmd *cobra.Command, args []string, commit *xmlparser.Com
 			}
 			log.Debug().Msg("Clipboard operation completed")
 		case Regenerate:
-			Run(cmd, args)
+			Run(cmd, args, c)
 		case Cancel:
 			log.Info().Msg("Commit aborted.")
 		}
@@ -189,35 +186,52 @@ func copyToClipboard(content string) error {
 	return nil
 }
 
-func generateCommitMessage(client llm.LLMProvider, status, diffs, subject string) (*xmlparser.Commit, error) {
+func generateCommitMessage(c *core.Core, status, diffs, subject string) (*Commit, error) {
 	spinner := NewSpinner()
 	spinner.Start("Generating commit message...")
 
-	sys := llm.SystemPrompt
+	sys := core.SystemPrompt
 	if _, exists := os.LookupEnv("DISABLE_EMOJI"); !exists {
 		sys += "\n• Please follow the gitmoji standard (https://gitmoji.dev/) and feel free to use emojis in the commit messages where appropriate to enhance readability and convey the nature of the changes."
 	}
 
-	// log.Debug().Msgf("System prompt: %s", sys)
-	// log.Debug().Msgf("Status: %s", status)
-	// log.Debug().Msgf("Subject: %s", subject)
-	// log.Debug().Msgf("Diffs: %s", diffs)
-	// log.Fatal().Msg("test")
+	opts := core.GenerateOptions{
+		SystemPrompt: sys,
+		Status:       status,
+		Diffs:        diffs,
+		Subject:      subject,
+	}
 
-	xmlContent, err := client.GenerateCommitMessage(sys, status, diffs, subject)
+	if c.IsDebug() {
+		log.Debug().Msgf("Generating commit message with options:")
+		log.Debug().Msgf("System prompt: %s", sys)
+		log.Debug().Msgf("Status: %d bytes", len(status))
+		log.Debug().Msgf("Status: %s", status)
+		log.Debug().Msgf("Diffs: %d bytes", len(diffs))
+		log.Debug().Msgf("Subject: %s", subject)
+	}
 
+	commit, err := c.GenerateCommit(context.Background(), opts)
 	spinner.Stop()
 
 	if err != nil {
+		if c.IsDebug() {
+			log.Debug().Err(err).Msg("Failed to generate commit message")
+		}
 		return nil, err
 	}
 
-	log.Debug().Msgf("XML content: %s", xmlContent)
+	if c.IsDebug() {
+		log.Debug().Interface("commit", commit).Msg("Generated commit message")
+	}
 
-	return xmlparser.ParseXMLCommit(xmlContent)
+	return &Commit{
+		Title:   commit.Title,
+		Message: commit.Message,
+	}, nil
 }
 
-func applyCommit(c *xmlparser.Commit) error {
+func applyCommit(c *Commit) error {
 	// Stage all changes
 	stageCmd := exec.Command("git", "add", "-A")
 	stageOutput, stageErr := stageCmd.CombinedOutput()
@@ -236,7 +250,7 @@ func applyCommit(c *xmlparser.Commit) error {
 
 // ===== AI COMMIT GENERATION
 
-func Run(cmd *cobra.Command, args []string) {
+func Run(cmd *cobra.Command, args []string, c *core.Core) {
 	if versionFlag, _ := cmd.Flags().GetBool("version"); versionFlag {
 		fmt.Println(cmd.Version)
 		return
@@ -251,11 +265,6 @@ func Run(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	client, err := getClient()
-	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to initialize AI client")
-	}
-
 	var subject string
 	if len(args) > 0 {
 		subject = args[0]
@@ -266,7 +275,7 @@ func Run(cmd *cobra.Command, args []string) {
 	log.Debug().Msgf("Force: %t", forceFlag)
 	log.Debug().Msgf("Prefix: %s", prefix)
 
-	commitMessage, err := generateCommitMessage(client, status, diffs, subject)
+	commitMessage, err := generateCommitMessage(c, status, diffs, subject)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to generate commit message")
 		os.Exit(1)
@@ -279,11 +288,11 @@ func Run(cmd *cobra.Command, args []string) {
 	if forceFlag {
 		handleForcedCommit(commitMessage)
 	} else {
-		handleUserResponse(cmd, args, commitMessage)
+		handleUserResponse(cmd, args, commitMessage, c)
 	}
 }
 
-func handleForcedCommit(commitMessage *xmlparser.Commit) {
+func handleForcedCommit(commitMessage *Commit) {
 	err := applyCommit(commitMessage)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to apply commit")
@@ -291,55 +300,4 @@ func handleForcedCommit(commitMessage *xmlparser.Commit) {
 	}
 	fmt.Printf("Commit applied: %s\n", commitMessage.Title)
 	os.Exit(0)
-}
-
-func getClient() (llm.LLMProvider, error) {
-	// Check for explicit provider selection
-	preferredProvider := os.Getenv("LLM_PROVIDER")
-	if preferredProvider != "" {
-		providerType := llm.LLMProviderType(preferredProvider)
-		switch providerType {
-		case llm.LLMProviderTypeAnthropic:
-			if key := os.Getenv("ANTHROPIC_API_KEY"); key != "" {
-				log.Debug().Msg("Using Anthropic as LLM provider (from LLM_PROVIDER)")
-				return anthropic.NewAnthropicClient(config.LLMConfig{APIKey: key}), nil
-			}
-			return nil, fmt.Errorf("%s selected as provider but ANTHROPIC_API_KEY is not set", llm.LLMProviderTypeAnthropic)
-
-		case llm.LLMProviderTypeOpenAI:
-			if key := os.Getenv("OPENAI_API_KEY"); key != "" {
-				log.Debug().Msg("Using OpenAI as LLM provider (from LLM_PROVIDER)")
-				return openai.NewOpenAIClient(config.LLMConfig{APIKey: key}), nil
-			}
-			return nil, fmt.Errorf("%s selected as provider but OPENAI_API_KEY is not set", llm.LLMProviderTypeOpenAI)
-
-		default:
-			return nil, fmt.Errorf("invalid LLM_PROVIDER value: %q. Must be either %s or %s",
-				preferredProvider, llm.LLMProviderTypeAnthropic, llm.LLMProviderTypeOpenAI)
-		}
-	}
-
-	// If no explicit provider selected, try both in order
-	var availableClients []llm.LLMProvider
-	var clientNames []string
-
-	// Try to initialize Anthropic client
-	if key := os.Getenv("ANTHROPIC_API_KEY"); key != "" {
-		availableClients = append(availableClients, anthropic.NewAnthropicClient(config.LLMConfig{APIKey: key}))
-		clientNames = append(clientNames, string(llm.LLMProviderTypeAnthropic))
-	}
-
-	// Try to initialize OpenAI client
-	if key := os.Getenv("OPENAI_API_KEY"); key != "" {
-		availableClients = append(availableClients, openai.NewOpenAIClient(config.LLMConfig{APIKey: key}))
-		clientNames = append(clientNames, string(llm.LLMProviderTypeOpenAI))
-	}
-
-	if len(availableClients) == 0 {
-		return nil, fmt.Errorf("no LLM providers available. Please set either ANTHROPIC_API_KEY or OPENAI_API_KEY environment variable")
-	}
-
-	// Use the first available client (prioritizing Anthropic)
-	log.Debug().Msgf("Using %s as LLM provider (default)", clientNames[0])
-	return availableClients[0], nil
 }

@@ -3,16 +3,23 @@ package openai
 import (
 	"bytes"
 	"commi/internal/config"
-	"commi/internal/llm"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
+	"time"
 )
 
 const (
-	defaultModel = "gpt-4o"
+	MaxTokensOutput = 5000
+	MaxTokensInput  = 10000 // TODO: make this configurable and implement limit
+	timeout         = 10 * time.Second
+)
+
+const (
+	defaultModel = "gpt-4"
 	apiURL       = "https://api.openai.com/v1/chat/completions"
 )
 
@@ -32,16 +39,20 @@ func NewOpenAIClient(config config.LLMConfig) *OpenAIClient {
 	}
 }
 
-func (c *OpenAIClient) GenerateCommitMessage(sysPrompt, status, diffs, subject string) (string, error) {
+func (c *OpenAIClient) GenerateCommitMessage(ctx context.Context, sysPrompt, status, diffs, subject string) (string, error) {
 	prompt := fmt.Sprintf("Git status:\n\n%s\n\nGit diffs:\n\n%s\n\nBased on this information, generate a good and descriptive commit message in XML format:", status, diffs)
 	if subject != "" {
 		prompt += fmt.Sprintf("\n\nPlease focus on the following subject in your commit message: %s", subject)
 	}
-	prompt = llm.TruncatePrompt(prompt, llm.MaxTokensInput)
+
+	// Truncate prompt if too long
+	if len(prompt) > MaxTokensInput {
+		prompt = prompt[:MaxTokensInput]
+	}
 
 	requestBody, err := json.Marshal(map[string]interface{}{
 		"model":      c.model,
-		"max_tokens": llm.MaxTokensOutput,
+		"max_tokens": MaxTokensOutput,
 		"messages": []map[string]string{
 			{
 				"role":    "system",
@@ -57,7 +68,7 @@ func (c *OpenAIClient) GenerateCommitMessage(sysPrompt, status, diffs, subject s
 		return "", fmt.Errorf("failed to marshal request body: %v", err)
 	}
 
-	req, err := http.NewRequest("POST", apiURL, bytes.NewBuffer(requestBody))
+	req, err := http.NewRequestWithContext(ctx, "POST", apiURL, bytes.NewBuffer(requestBody))
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %v", err)
 	}
@@ -66,7 +77,7 @@ func (c *OpenAIClient) GenerateCommitMessage(sysPrompt, status, diffs, subject s
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 
 	client := &http.Client{
-		Timeout: llm.LLMClientTimeout,
+		Timeout: timeout,
 	}
 	resp, err := client.Do(req)
 	if err != nil {

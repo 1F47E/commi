@@ -1,28 +1,4 @@
-package llm
-
-import "time"
-
-const (
-	MaxTokensOutput  = 5000
-	MaxTokensInput   = 10000 // TODO: make this configurable and implement limit
-	LLMClientTimeout = 10 * time.Second
-)
-
-type LLMProviderType string
-
-const (
-	LLMProviderTypeAnthropic LLMProviderType = "ANTHROPIC"
-	LLMProviderTypeOpenAI    LLMProviderType = "OPENAI"
-)
-
-func ValidateProvider(provider LLMProviderType) bool {
-	switch provider {
-	case LLMProviderTypeAnthropic, LLMProviderTypeOpenAI:
-		return true
-	default:
-		return false
-	}
-}
+package core
 
 const SystemPrompt = `You are an AI assistant that helps developers write better commit messages. Your task is to analyze the git status and diffs, and generate a descriptive and informative commit message that follows best practices.
 
@@ -42,14 +18,3 @@ Format your response in XML with the following structure:
     Your detailed description here
   </description>
 </commit>`
-
-type LLMProvider interface {
-	GenerateCommitMessage(systemPrompt, status, diffs, subject string) (string, error)
-}
-
-func TruncatePrompt(prompt string, maxTokens int) string {
-	if len(prompt) > maxTokens {
-		return prompt[:maxTokens] + "..."
-	}
-	return prompt
-}

@@ -7,9 +7,9 @@ import (
 )
 
 const (
-	DefaultTimeout    = 10 * time.Second
+	DefaultTimeout    = 30 * time.Second
 	DefaultMaxRetries = 3
-	DefaultRetryDelay = 1 * time.Second
+	DefaultRetryDelay = 3 * time.Second
 )
 
 type ClientConfig struct {

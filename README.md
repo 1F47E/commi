@@ -60,6 +60,7 @@ commi "fixed CR-22 ticket"
 
 - `[subject]`: Specify a subject for the commit message (optional).
 - `-a, --auto`: Automatically commit without opening a dialog.
+- `-f, --force`: Commit generated message without review (yolo mode).
 - `-v, --version`: Display version information.
 
 ## Configuration

@@ -22,9 +22,9 @@ var errorLoggingOnly string
 // ===== ROOT COMMAND
 
 var rootCmd = &cobra.Command{
-	Use:     "aicommit [subject]",
+	Use:     "commi [subject]",
 	Short:   "Generate and apply AI-powered commit messages",
-	Run:     tui.RunAICommit,
+	Run:     tui.Run,
 	Version: version,
 	Args:    cobra.MaximumNArgs(1),
 }

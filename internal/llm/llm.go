@@ -3,17 +3,21 @@ package llm
 import "time"
 
 const (
-	MaxTokens        = 4000
-	LLMClientTimeout = 30 * time.Second
-
-	// Provider types
-	ProviderAnthropic = "ANTHROPIC"
-	ProviderOpenAI    = "OPENAI"
+	MaxTokensOutput  = 5000
+	MaxTokensInput   = 10000 // TODO: make this configurable and implement limit
+	LLMClientTimeout = 10 * time.Second
 )
 
-func ValidateProvider(provider string) bool {
+type LLMProviderType string
+
+const (
+	LLMProviderTypeAnthropic LLMProviderType = "ANTHROPIC"
+	LLMProviderTypeOpenAI    LLMProviderType = "OPENAI"
+)
+
+func ValidateProvider(provider LLMProviderType) bool {
 	switch provider {
-	case ProviderAnthropic, ProviderOpenAI:
+	case LLMProviderTypeAnthropic, LLMProviderTypeOpenAI:
 		return true
 	default:
 		return false
@@ -33,9 +37,9 @@ Please follow these guidelines:
 
 Format your response in XML with the following structure:
 <commit>
-  <title>Your concise title here</title>
+  <title>Your title here</title>
   <description>
-    Your detailed description here (optional)
+    Your detailed description here
   </description>
 </commit>`
 

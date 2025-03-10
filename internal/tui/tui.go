@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"commi/internal/commit"
 	"commi/internal/config"
 	"commi/internal/git"
 	"commi/internal/llm"
@@ -74,7 +73,7 @@ func (d itemDelegate) Render(w io.Writer, m list.Model, index int, listItem list
 
 type model struct {
 	list     list.Model
-	commit   *commit.Commit
+	commit   *xmlparser.Commit
 	choice   MenuAction
 	quitting bool
 }
@@ -118,11 +117,11 @@ func (m model) View() string {
 	return fmt.Sprintf("%s\n\n%s", commitMessage, m.list.View())
 }
 
-func renderCommitMessage(commit *commit.Commit) string {
+func renderCommitMessage(commit *xmlparser.Commit) string {
 	return fmt.Sprintf("%s\n\n%s", commit.Title, commit.Message)
 }
 
-func handleUserResponse(cmd *cobra.Command, args []string, commit *commit.Commit) {
+func handleUserResponse(cmd *cobra.Command, args []string, commit *xmlparser.Commit) {
 	items := []list.Item{
 		item{title: "✅ Commit this", action: CommitThis},
 		item{title: "📋 Copy to clipboard and exit", action: CopyToClipboard},
@@ -172,7 +171,7 @@ func handleUserResponse(cmd *cobra.Command, args []string, commit *commit.Commit
 			}
 			log.Debug().Msg("Clipboard operation completed")
 		case Regenerate:
-			RunAICommit(cmd, args)
+			Run(cmd, args)
 		case Cancel:
 			log.Info().Msg("Commit aborted.")
 		}
@@ -190,7 +189,7 @@ func copyToClipboard(content string) error {
 	return nil
 }
 
-func generateCommitMessage(client llm.LLMProvider, status, diffs, subject string) (*commit.Commit, error) {
+func generateCommitMessage(client llm.LLMProvider, status, diffs, subject string) (*xmlparser.Commit, error) {
 	spinner := NewSpinner()
 	spinner.Start("Generating commit message...")
 
@@ -198,6 +197,12 @@ func generateCommitMessage(client llm.LLMProvider, status, diffs, subject string
 	if _, exists := os.LookupEnv("DISABLE_EMOJI"); !exists {
 		sys += "\n• Please follow the gitmoji standard (https://gitmoji.dev/) and feel free to use emojis in the commit messages where appropriate to enhance readability and convey the nature of the changes."
 	}
+
+	// log.Debug().Msgf("System prompt: %s", sys)
+	// log.Debug().Msgf("Status: %s", status)
+	// log.Debug().Msgf("Subject: %s", subject)
+	// log.Debug().Msgf("Diffs: %s", diffs)
+	// log.Fatal().Msg("test")
 
 	xmlContent, err := client.GenerateCommitMessage(sys, status, diffs, subject)
 
@@ -207,10 +212,12 @@ func generateCommitMessage(client llm.LLMProvider, status, diffs, subject string
 		return nil, err
 	}
 
+	log.Debug().Msgf("XML content: %s", xmlContent)
+
 	return xmlparser.ParseXMLCommit(xmlContent)
 }
 
-func applyCommit(c *commit.Commit) error {
+func applyCommit(c *xmlparser.Commit) error {
 	// Stage all changes
 	stageCmd := exec.Command("git", "add", "-A")
 	stageOutput, stageErr := stageCmd.CombinedOutput()
@@ -219,8 +226,7 @@ func applyCommit(c *commit.Commit) error {
 	}
 
 	// Commit the staged changes
-	message := c.Title
-	commitCmd := exec.Command("git", "commit", "-m", message)
+	commitCmd := exec.Command("git", "commit", "-m", c.Title, "-m", c.Message)
 	commitOutput, commitErr := commitCmd.CombinedOutput()
 	if commitErr != nil {
 		return fmt.Errorf("failed to apply commit: %v\nOutput: %s", commitErr, string(commitOutput))
@@ -230,7 +236,7 @@ func applyCommit(c *commit.Commit) error {
 
 // ===== AI COMMIT GENERATION
 
-func RunAICommit(cmd *cobra.Command, args []string) {
+func Run(cmd *cobra.Command, args []string) {
 	if versionFlag, _ := cmd.Flags().GetBool("version"); versionFlag {
 		fmt.Println(cmd.Version)
 		return
@@ -273,7 +279,7 @@ func RunAICommit(cmd *cobra.Command, args []string) {
 	}
 }
 
-func handleForcedCommit(commitMessage *commit.Commit) {
+func handleForcedCommit(commitMessage *xmlparser.Commit) {
 	err := applyCommit(commitMessage)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to apply commit")
@@ -287,24 +293,25 @@ func getClient() (llm.LLMProvider, error) {
 	// Check for explicit provider selection
 	preferredProvider := os.Getenv("LLM_PROVIDER")
 	if preferredProvider != "" {
-		switch preferredProvider {
-		case llm.ProviderAnthropic:
+		providerType := llm.LLMProviderType(preferredProvider)
+		switch providerType {
+		case llm.LLMProviderTypeAnthropic:
 			if key := os.Getenv("ANTHROPIC_API_KEY"); key != "" {
 				log.Debug().Msg("Using Anthropic as LLM provider (from LLM_PROVIDER)")
 				return anthropic.NewAnthropicClient(config.LLMConfig{APIKey: key}), nil
 			}
-			return nil, fmt.Errorf("%s selected as provider but ANTHROPIC_API_KEY is not set", llm.ProviderAnthropic)
+			return nil, fmt.Errorf("%s selected as provider but ANTHROPIC_API_KEY is not set", llm.LLMProviderTypeAnthropic)
 
-		case llm.ProviderOpenAI:
+		case llm.LLMProviderTypeOpenAI:
 			if key := os.Getenv("OPENAI_API_KEY"); key != "" {
 				log.Debug().Msg("Using OpenAI as LLM provider (from LLM_PROVIDER)")
 				return openai.NewOpenAIClient(config.LLMConfig{APIKey: key}), nil
 			}
-			return nil, fmt.Errorf("%s selected as provider but OPENAI_API_KEY is not set", llm.ProviderOpenAI)
+			return nil, fmt.Errorf("%s selected as provider but OPENAI_API_KEY is not set", llm.LLMProviderTypeOpenAI)
 
 		default:
 			return nil, fmt.Errorf("invalid LLM_PROVIDER value: %q. Must be either %s or %s",
-				preferredProvider, llm.ProviderAnthropic, llm.ProviderOpenAI)
+				preferredProvider, llm.LLMProviderTypeAnthropic, llm.LLMProviderTypeOpenAI)
 		}
 	}
 
@@ -315,13 +322,13 @@ func getClient() (llm.LLMProvider, error) {
 	// Try to initialize Anthropic client
 	if key := os.Getenv("ANTHROPIC_API_KEY"); key != "" {
 		availableClients = append(availableClients, anthropic.NewAnthropicClient(config.LLMConfig{APIKey: key}))
-		clientNames = append(clientNames, llm.ProviderAnthropic)
+		clientNames = append(clientNames, string(llm.LLMProviderTypeAnthropic))
 	}
 
 	// Try to initialize OpenAI client
 	if key := os.Getenv("OPENAI_API_KEY"); key != "" {
 		availableClients = append(availableClients, openai.NewOpenAIClient(config.LLMConfig{APIKey: key}))
-		clientNames = append(clientNames, llm.ProviderOpenAI)
+		clientNames = append(clientNames, string(llm.LLMProviderTypeOpenAI))
 	}
 
 	if len(availableClients) == 0 {

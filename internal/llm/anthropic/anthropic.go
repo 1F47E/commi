@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	defaultModel = "claude-3-5-sonnet-20240620"
+	defaultModel = "claude-3-5-sonnet-20241022"
 	apiURL       = "https://api.anthropic.com/v1/messages"
 )
 
@@ -36,11 +36,11 @@ func (c *AnthropicClient) GenerateCommitMessage(sysPrompt, status, diffs, subjec
 	if subject != "" {
 		prompt += fmt.Sprintf("\n\nPlease focus on the following subject in your commit message: %s", subject)
 	}
-	prompt = llm.TruncatePrompt(prompt, llm.MaxTokens)
+	prompt = llm.TruncatePrompt(prompt, llm.MaxTokensInput)
 
 	requestBody, err := json.Marshal(map[string]interface{}{
 		"model":      c.model,
-		"max_tokens": llm.MaxTokens,
+		"max_tokens": llm.MaxTokensOutput,
 		"messages": []map[string]interface{}{
 			{
 				"role": "user",

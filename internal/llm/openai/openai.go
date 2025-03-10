@@ -37,11 +37,11 @@ func (c *OpenAIClient) GenerateCommitMessage(sysPrompt, status, diffs, subject s
 	if subject != "" {
 		prompt += fmt.Sprintf("\n\nPlease focus on the following subject in your commit message: %s", subject)
 	}
-	prompt = llm.TruncatePrompt(prompt, llm.MaxTokens)
+	prompt = llm.TruncatePrompt(prompt, llm.MaxTokensInput)
 
 	requestBody, err := json.Marshal(map[string]interface{}{
 		"model":      c.model,
-		"max_tokens": llm.MaxTokens,
+		"max_tokens": llm.MaxTokensOutput,
 		"messages": []map[string]string{
 			{
 				"role":    "system",

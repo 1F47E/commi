@@ -16,5 +16,5 @@ lint:
 
 run:
 	@echo "Running..."
-	go run .
+	DEBUG=1 go run .
 

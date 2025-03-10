@@ -54,7 +54,8 @@ func init() {
 	log.Logger = log.Output(output)
 }
 
-func getProvider() (config.LLMProvider, error) {
+func getProvider() (core.LLMClient, error) {
+	// TODO: move to config, add selector for models
 	// Try to initialize Anthropic client first
 	if key := os.Getenv("ANTHROPIC_API_KEY"); key != "" {
 		log.Debug().Msg("Using Anthropic as LLM provider")

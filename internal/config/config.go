@@ -1,7 +1,6 @@
 package config
 
 import (
-	"context"
 	"fmt"
 	"os"
 )
@@ -9,11 +8,6 @@ import (
 type LLMConfig struct {
 	APIKey string
 	Model  string
-}
-
-// LLMProvider defines the interface for LLM clients
-type LLMProvider interface {
-	GenerateCommitMessage(ctx context.Context, systemPrompt, status, diffs, subject string) (string, error)
 }
 
 func ValidateLLMConfig() error {

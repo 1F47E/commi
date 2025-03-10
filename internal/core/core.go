@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 )
 
 var (
@@ -12,25 +11,21 @@ var (
 	ErrEmptyDiffs        = errors.New("diffs cannot be empty")
 )
 
-type LLMProvider interface {
+type LLMClient interface {
 	GenerateCommitMessage(ctx context.Context, systemPrompt, status, diffs, subject string) (string, error)
 }
 
 type Core struct {
-	llm LLMProvider
+	client LLMClient
 }
 
-func NewCore(llm LLMProvider) *Core {
-	if llm == nil {
-		panic("llm provider cannot be nil")
+func NewCore(client LLMClient) *Core {
+	if client == nil {
+		panic("LLM client cannot be nil")
 	}
 	return &Core{
-		llm: llm,
+		client: client,
 	}
-}
-
-func (c *Core) IsDebug() bool {
-	return os.Getenv("DEBUG") != ""
 }
 
 type CommitMessage struct {
@@ -60,7 +55,7 @@ func (c *Core) GenerateCommit(ctx context.Context, opts GenerateOptions) (*Commi
 		return nil, fmt.Errorf("invalid options: %w", err)
 	}
 
-	xmlContent, err := c.llm.GenerateCommitMessage(
+	xmlContent, err := c.client.GenerateCommitMessage(
 		ctx,
 		opts.SystemPrompt,
 		opts.Status,
@@ -68,12 +63,12 @@ func (c *Core) GenerateCommit(ctx context.Context, opts GenerateOptions) (*Commi
 		opts.Subject,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("llm provider failed: %w", err)
+		return nil, fmt.Errorf("LLM client failed: %w", err)
 	}
 
 	commit, err := parseCommitMessage(xmlContent)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse llm response: %w", err)
+		return nil, fmt.Errorf("failed to parse LLM response: %w", err)
 	}
 
 	return commit, nil

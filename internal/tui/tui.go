@@ -3,6 +3,7 @@ package tui
 import (
 	"commi/internal/core"
 	"commi/internal/git"
+	"commi/internal/utils"
 	"context"
 	"fmt"
 	"io"
@@ -202,7 +203,7 @@ func generateCommitMessage(c *core.Core, status, diffs, subject string) (*Commit
 		Subject:      subject,
 	}
 
-	if c.IsDebug() {
+	if utils.IsDebug() {
 		log.Debug().Msgf("Generating commit message with options:")
 		log.Debug().Msgf("System prompt: %s", sys)
 		log.Debug().Msgf("Status: %d bytes", len(status))
@@ -215,13 +216,13 @@ func generateCommitMessage(c *core.Core, status, diffs, subject string) (*Commit
 	spinner.Stop()
 
 	if err != nil {
-		if c.IsDebug() {
+		if utils.IsDebug() {
 			log.Debug().Err(err).Msg("Failed to generate commit message")
 		}
 		return nil, err
 	}
 
-	if c.IsDebug() {
+	if utils.IsDebug() {
 		log.Debug().Interface("commit", commit).Msg("Generated commit message")
 	}
 

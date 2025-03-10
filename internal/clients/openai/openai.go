@@ -1,7 +1,7 @@
 package openai
 
 import (
-	"bytes"
+	"commi/internal/clients/common"
 	"commi/internal/config"
 	"context"
 	"encoding/json"
@@ -9,23 +9,23 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"time"
 )
 
 const (
 	MaxTokensOutput = 5000
 	MaxTokensInput  = 10000 // TODO: make this configurable and implement limit
-	timeout         = 10 * time.Second
 )
 
 const (
-	defaultModel = "gpt-4"
+	defaultModel = "gpt-3-mini"
 	apiURL       = "https://api.openai.com/v1/chat/completions"
 )
 
 type OpenAIClient struct {
 	apiKey string
 	model  string
+	client *http.Client
+	config common.ClientConfig
 }
 
 func NewOpenAIClient(config config.LLMConfig) *OpenAIClient {
@@ -33,10 +33,53 @@ func NewOpenAIClient(config config.LLMConfig) *OpenAIClient {
 	if model == "" {
 		model = defaultModel
 	}
+
+	clientConfig := common.DefaultConfig()
+	clientConfig.Headers = map[string]string{
+		"Content-Type":  "application/json",
+		"Authorization": "Bearer " + config.APIKey,
+	}
+
 	return &OpenAIClient{
 		apiKey: config.APIKey,
 		model:  model,
+		client: common.NewHTTPClient(clientConfig),
+		config: clientConfig,
 	}
+}
+
+type openaiResponse struct {
+	Choices []struct {
+		Message struct {
+			Content string `json:"content"`
+		} `json:"message"`
+	} `json:"choices"`
+	Error *struct {
+		Message string `json:"message"`
+		Type    string `json:"type"`
+	} `json:"error"`
+}
+
+func (c *OpenAIClient) handleResponse(resp *http.Response) (*openaiResponse, error) {
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("API error: status=%d, body=%s", resp.StatusCode, string(body))
+	}
+
+	var response openaiResponse
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	if response.Error != nil {
+		return nil, fmt.Errorf("API error: %s - %s", response.Error.Type, response.Error.Message)
+	}
+
+	return &response, nil
 }
 
 func (c *OpenAIClient) GenerateCommitMessage(ctx context.Context, sysPrompt, status, diffs, subject string) (string, error) {
@@ -45,7 +88,6 @@ func (c *OpenAIClient) GenerateCommitMessage(ctx context.Context, sysPrompt, sta
 		prompt += fmt.Sprintf("\n\nPlease focus on the following subject in your commit message: %s", subject)
 	}
 
-	// Truncate prompt if too long
 	if len(prompt) > MaxTokensInput {
 		prompt = prompt[:MaxTokensInput]
 	}
@@ -65,41 +107,24 @@ func (c *OpenAIClient) GenerateCommitMessage(ctx context.Context, sysPrompt, sta
 		},
 	})
 	if err != nil {
-		return "", fmt.Errorf("failed to marshal request body: %v", err)
+		return "", fmt.Errorf("failed to marshal request body: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", apiURL, bytes.NewBuffer(requestBody))
+	req, err := common.NewRequest(http.MethodPost, apiURL, requestBody, c.config)
 	if err != nil {
-		return "", fmt.Errorf("failed to create request: %v", err)
+		return "", fmt.Errorf("failed to create request: %w", err)
 	}
+	req = req.WithContext(ctx)
 
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+c.apiKey)
-
-	client := &http.Client{
-		Timeout: timeout,
-	}
-	resp, err := client.Do(req)
+	resp, err := c.client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("failed to send request: %v", err)
+		return "", fmt.Errorf("failed to send request: %w", err)
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	response, err := c.handleResponse(resp)
 	if err != nil {
-		return "", fmt.Errorf("failed to read response body: %v", err)
-	}
-
-	var response struct {
-		Choices []struct {
-			Message struct {
-				Content string `json:"content"`
-			} `json:"message"`
-		} `json:"choices"`
-	}
-
-	if err := json.Unmarshal(body, &response); err != nil {
-		return "", fmt.Errorf("failed to unmarshal response: %v", err)
+		return "", err
 	}
 
 	if len(response.Choices) == 0 {

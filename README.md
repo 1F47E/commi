@@ -46,7 +46,13 @@ After installation, you can use AICommit by simply running:
 commi
 ```
 
-Or if you want to specify a subject for the commit message:
+Or if you want to commit in YOLO mode without review:
+
+```bash
+commi -f
+```
+
+Or if you want to specify a subject for the commit message (like a jira ticket?):
 
 ```bash
 commi "fixed CR-22 ticket"

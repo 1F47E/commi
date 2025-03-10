@@ -11,36 +11,28 @@ COMMI is your git commit friend.
 The easiest way to install COMMI is by using the provided installation script:
 
 ```bash
-# Clone the repository
 git clone https://github.com/user/commi.git
 cd commi
 
-# Run the installation script
 ./install.sh
 ```
 
-This script will:
-- Build COMMI from source with proper versioning
-- Install it to `/usr/local/bin/` (requires sudo permission)
-- Make it executable
 
 ### Manual Installation from Source
 
-Alternatively, you can manually build and install COMMI:
+Alternatively, you can manually build and install:
 
 ```bash
-# Clone the repository
 git clone https://github.com/user/commi.git
 cd commi
 
-# Build and install
 go build
 go install
 ```
 
 ## Usage
 
-After installation, you can use AICommit by simply running:
+cd to a project with git that has some changes you want to commit and run 
 
 ```bash
 commi
@@ -55,7 +47,7 @@ commi -f
 Or if you want to specify a subject for the commit message (like a jira ticket?):
 
 ```bash
-commi "fixed CR-22 ticket"
+commi "CR-22 WIP"
 ```
 
 ![COMMI Screenshot 1](_media/screenshot1.png)
@@ -65,7 +57,6 @@ commi "fixed CR-22 ticket"
 ### Optional Arguments
 
 - `[subject]`: Specify a subject for the commit message (optional).
-- `-a, --auto`: Automatically commit without opening a dialog.
 - `-f, --force`: Commit generated message without review (yolo mode).
 - `-v, --version`: Display version information.
 

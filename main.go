@@ -3,7 +3,6 @@ package main
 import (
 	"commi/internal/clients/anthropic"
 	"commi/internal/clients/openai"
-	"commi/internal/config"
 	"commi/internal/core"
 	"commi/internal/tui"
 	"fmt"
@@ -60,13 +59,13 @@ func getProvider() (core.LLMClient, error) {
 	// Check for Anthropic API key
 	if key := os.Getenv("ANTHROPIC_API_KEY"); key != "" {
 		log.Debug().Msg("Found Anthropic API key")
-		providers["ANTHROPIC"] = anthropic.NewAnthropicClient(config.LLMConfig{APIKey: key})
+		providers["ANTHROPIC"] = anthropic.NewAnthropicClient(key)
 	}
 
 	// Check for OpenAI API key
 	if key := os.Getenv("OPENAI_API_KEY"); key != "" {
 		log.Debug().Msg("Found OpenAI API key")
-		providers["OPENAI"] = openai.NewOpenAIClient(config.LLMConfig{APIKey: key})
+		providers["OPENAI"] = openai.NewOpenAIClient(key)
 	}
 
 	// If no providers available, return error
@@ -118,10 +117,6 @@ func runCommand(cmd *cobra.Command, args []string) {
 }
 
 func main() {
-	if err := config.ValidateLLMConfig(); err != nil {
-		log.Fatal().Err(err).Msg("LLM configuration error")
-	}
-
 	if err := rootCmd.Execute(); err != nil {
 		log.Error().Msg(fmt.Sprintf("Failed to execute root command: %v", err))
 		os.Exit(1)

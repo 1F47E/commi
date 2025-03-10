@@ -2,7 +2,6 @@ package anthropic
 
 import (
 	"commi/internal/clients/common"
-	"commi/internal/config"
 	"commi/internal/utils"
 	"context"
 	"encoding/json"
@@ -33,22 +32,18 @@ type AnthropicClient struct {
 	config common.ClientConfig
 }
 
-func NewAnthropicClient(config config.LLMConfig) *AnthropicClient {
-	model := config.Model
-	if model == "" {
-		model = defaultModel
-	}
+func NewAnthropicClient(key string) *AnthropicClient {
 
 	clientConfig := common.DefaultConfig()
 	clientConfig.Headers = map[string]string{
 		"Content-Type":      "application/json",
-		"x-api-key":         config.APIKey,
+		"x-api-key":         key,
 		"anthropic-version": anthropicVersion,
 	}
 
 	return &AnthropicClient{
-		apiKey: config.APIKey,
-		model:  model,
+		apiKey: key,
+		model:  defaultModel,
 		client: common.NewHTTPClient(clientConfig),
 		config: clientConfig,
 	}

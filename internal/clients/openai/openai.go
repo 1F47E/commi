@@ -2,7 +2,6 @@ package openai
 
 import (
 	"commi/internal/clients/common"
-	"commi/internal/config"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -29,21 +28,17 @@ type OpenAIClient struct {
 	config common.ClientConfig
 }
 
-func NewOpenAIClient(config config.LLMConfig) *OpenAIClient {
-	model := config.Model
-	if model == "" {
-		model = defaultModel
-	}
+func NewOpenAIClient(key string) *OpenAIClient {
 
 	clientConfig := common.DefaultConfig()
 	clientConfig.Headers = map[string]string{
 		"Content-Type":  "application/json",
-		"Authorization": "Bearer " + config.APIKey,
+		"Authorization": "Bearer " + key,
 	}
 
 	return &OpenAIClient{
-		apiKey: config.APIKey,
-		model:  model,
+		apiKey: key,
+		model:  defaultModel,
 		client: common.NewHTTPClient(clientConfig),
 		config: clientConfig,
 	}

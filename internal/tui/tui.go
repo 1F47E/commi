@@ -243,6 +243,10 @@ func Run(cmd *cobra.Command, args []string) {
 	}
 	status, diffs, err := git.GetGitInfo()
 	if err != nil {
+		if err.Error() == "nothing to commit" {
+			fmt.Println("No changes to commit. Make some changes and try again.")
+			return
+		}
 		log.Error().Err(err).Msg("Failed to get git information")
 		os.Exit(1)
 	}

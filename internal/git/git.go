@@ -11,6 +11,9 @@ import (
 func GetGitInfo() (string, string, error) {
 	status, err := GetGitStatus()
 	if err != nil {
+		if err.Error() == "nothing to commit" {
+			return "", "", fmt.Errorf("nothing to commit")
+		}
 		return "", "", fmt.Errorf("failed to get git status: %w", err)
 	}
 
@@ -39,9 +42,6 @@ func GetGitStatus() (string, error) {
 		return "", err
 	}
 	if len(output) == 0 {
-		return "", fmt.Errorf("nothing to commit")
-	}
-	if strings.Contains(string(output), "nothing to commit") {
 		return "", fmt.Errorf("nothing to commit")
 	}
 	return string(output), nil

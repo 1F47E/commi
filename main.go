@@ -53,22 +53,53 @@ func init() {
 
 	log.Logger = log.Output(output)
 }
-
 func getProvider() (core.LLMClient, error) {
-	// TODO: move to config, add selector for models
-	// Try to initialize Anthropic client first
+	// Initialize available providers
+	providers := make(map[string]core.LLMClient)
+
+	// Check for Anthropic API key
 	if key := os.Getenv("ANTHROPIC_API_KEY"); key != "" {
-		log.Debug().Msg("Using Anthropic as LLM provider")
-		return anthropic.NewAnthropicClient(config.LLMConfig{APIKey: key}), nil
+		log.Debug().Msg("Found Anthropic API key")
+		providers["ANTHROPIC"] = anthropic.NewAnthropicClient(config.LLMConfig{APIKey: key})
 	}
 
-	// Try OpenAI client second
+	// Check for OpenAI API key
 	if key := os.Getenv("OPENAI_API_KEY"); key != "" {
-		log.Debug().Msg("Using OpenAI as LLM provider")
-		return openai.NewOpenAIClient(config.LLMConfig{APIKey: key}), nil
+		log.Debug().Msg("Found OpenAI API key")
+		providers["OPENAI"] = openai.NewOpenAIClient(config.LLMConfig{APIKey: key})
 	}
 
-	return nil, fmt.Errorf("no LLM providers available. Please set either ANTHROPIC_API_KEY or OPENAI_API_KEY environment variable")
+	// If no providers available, return error
+	if len(providers) == 0 {
+		return nil, fmt.Errorf("no LLM providers available. Please set either ANTHROPIC_API_KEY or OPENAI_API_KEY environment variable")
+	}
+
+	// Check if provider is explicitly set via environment variable
+	if provider := os.Getenv("COMMI_LLM_PROVIDER"); provider != "" {
+		if client, exists := providers[provider]; exists {
+			log.Debug().Msgf("Using %s as LLM provider (from COMMI_LLM_PROVIDER)", provider)
+			return client, nil
+		}
+		log.Warn().Msgf("Provider %s specified in COMMI_LLM_PROVIDER not available, falling back to auto-detection", provider)
+	}
+
+	// If only one provider available, use it
+	if len(providers) == 1 {
+		for name, client := range providers {
+			log.Debug().Msgf("Using %s as LLM provider (only one available)", name)
+			return client, nil
+		}
+	}
+
+	// Prefer Anthropic if available
+	if client, exists := providers["ANTHROPIC"]; exists {
+		log.Debug().Msg("Using Anthropic as LLM provider (preferred)")
+		return client, nil
+	}
+
+	// Otherwise use OpenAI
+	log.Debug().Msg("Using OpenAI as LLM provider")
+	return providers["OPENAI"], nil
 }
 
 func runCommand(cmd *cobra.Command, args []string) {

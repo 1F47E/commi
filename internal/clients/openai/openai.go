@@ -17,7 +17,8 @@ const (
 )
 
 const (
-	defaultModel = "gpt-3-mini"
+	// defaultModel = "o3-mini"
+	defaultModel = "gpt-4o-mini"
 	apiURL       = "https://api.openai.com/v1/chat/completions"
 )
 
@@ -91,10 +92,8 @@ func (c *OpenAIClient) GenerateCommitMessage(ctx context.Context, sysPrompt, sta
 	if len(prompt) > MaxTokensInput {
 		prompt = prompt[:MaxTokensInput]
 	}
-
 	requestBody, err := json.Marshal(map[string]interface{}{
-		"model":      c.model,
-		"max_tokens": MaxTokensOutput,
+		"model": c.model,
 		"messages": []map[string]string{
 			{
 				"role":    "system",
@@ -105,6 +104,8 @@ func (c *OpenAIClient) GenerateCommitMessage(ctx context.Context, sysPrompt, sta
 				"content": prompt,
 			},
 		},
+		"max_tokens": MaxTokensOutput,
+		// "max_completion_tokens": MaxTokensOutput, // TODO: support gpt models with max_tokens
 	})
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal request body: %w", err)

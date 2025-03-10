@@ -22,8 +22,10 @@ const (
 
 const (
 	anthropicVersion = "2023-06-01"
-	defaultModel     = "claude-3-sonnet-20240229"
-	apiURL           = "https://api.anthropic.com/v1/messages"
+	// defaultModel     = "claude-3-sonnet-20240229"
+	// defaultModel     = "claude-3-5-sonnet-20240620"
+	defaultModel = "claude-3-7-sonnet-20250219"
+	apiURL       = "https://api.anthropic.com/v1/messages"
 )
 
 type AnthropicClient struct {

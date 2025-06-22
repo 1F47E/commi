@@ -1,13 +1,17 @@
 package openai
 
 import (
-	"commi/internal/clients/common"
-	"context"
-	"encoding/json"
-	"fmt"
-	"io"
-	"net/http"
-	"strings"
+   "commi/internal/clients/common"
+   "commi/internal/utils"
+
+   "context"
+   "encoding/json"
+   "fmt"
+   "io"
+   "net/http"
+   "strings"
+
+   "github.com/rs/zerolog/log"
 )
 
 const (
@@ -57,12 +61,17 @@ type openaiResponse struct {
 }
 
 func (c *OpenAIClient) handleResponse(resp *http.Response) (*openaiResponse, error) {
-	body, err := io.ReadAll(resp.Body)
+   body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	if resp.StatusCode != http.StatusOK {
+   // Debug: log raw response status and body when DEBUG is set
+   if utils.IsDebug() {
+       log.Debug().Msgf("OpenAI response status: %d", resp.StatusCode)
+       log.Debug().Msgf("OpenAI response body: %s", string(body))
+   }
+   if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("API error: status=%d, body=%s", resp.StatusCode, string(body))
 	}
 
@@ -110,7 +119,12 @@ func (c *OpenAIClient) GenerateCommitMessage(ctx context.Context, sysPrompt, sta
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %w", err)
 	}
-	req = req.WithContext(ctx)
+   req = req.WithContext(ctx)
+   // Debug: log raw request URL and body when DEBUG is set
+   if utils.IsDebug() {
+       log.Debug().Msgf("OpenAI request URL: %s", req.URL.String())
+       log.Debug().Msgf("OpenAI request body: %s", string(requestBody))
+   }
 
 	resp, err := c.client.Do(req)
 	if err != nil {

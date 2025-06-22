@@ -43,11 +43,16 @@ func init() {
 		NoColor:    false,
 	}
 
-	// Set log level based on the errorLoggingOnly flag
-	if errorLoggingOnly == "true" {
+	// Configure log level based on DEBUG env var and errorLoggingOnly build flag
+	if os.Getenv("DEBUG") != "" {
+		// Enable debug logging when DEBUG is set
+		zerolog.SetGlobalLevel(zerolog.DebugLevel)
+	} else if errorLoggingOnly == "true" {
+		// Only log errors in production builds
 		zerolog.SetGlobalLevel(zerolog.ErrorLevel)
 	} else {
-		zerolog.SetGlobalLevel(zerolog.DebugLevel)
+		// Default to info level
+		zerolog.SetGlobalLevel(zerolog.InfoLevel)
 	}
 
 	log.Logger = log.Output(output)

@@ -115,7 +115,12 @@ func (c *AnthropicClient) GenerateCommitMessage(ctx context.Context, sysPrompt, 
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %w", err)
 	}
-	req = req.WithContext(ctx)
+   req = req.WithContext(ctx)
+   // Debug: log raw request URL and body when DEBUG is set
+   if utils.IsDebug() {
+       log.Debug().Msgf("Anthropic request URL: %s", req.URL.String())
+       log.Debug().Msgf("Anthropic request body: %s", string(requestBody))
+   }
 
 	resp, err := c.client.Do(req)
 	if err != nil {

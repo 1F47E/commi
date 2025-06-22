@@ -120,6 +120,20 @@ func renderCommitMessage(commit *Commit) string {
 }
 
 func handleUserResponse(cmd *cobra.Command, args []string, commit *Commit, c *core.Core) {
+	// Check if we're in a TTY environment
+	if !utils.IsTTY() {
+		// In non-TTY environment with force flag, apply commit directly
+		forceFlag, _ := cmd.Flags().GetBool("force")
+		if forceFlag {
+			handleForcedCommit(commit)
+			return
+		}
+		// Otherwise, just print the commit message and exit
+		fmt.Printf("Generated commit message:\n%s\n\n%s\n", commit.Title, commit.Message)
+		fmt.Println("\nRun with -f flag to apply this commit automatically in non-interactive environments.")
+		return
+	}
+
 	items := []list.Item{
 		item{title: "✅ Commit this", action: CommitThis},
 		item{title: "📋 Copy to clipboard and exit", action: CopyToClipboard},

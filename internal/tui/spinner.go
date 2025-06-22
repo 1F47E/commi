@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"commi/internal/utils"
 	"fmt"
 	"time"
 
@@ -15,6 +16,7 @@ type Spinner struct {
 	model     spinnerModel
 	doneChan  chan struct{}
 	startTime time.Time
+	isTTY     bool
 }
 
 type spinnerModel struct {
@@ -40,6 +42,7 @@ func NewSpinner() *Spinner {
 	return &Spinner{
 		model:    model,
 		doneChan: make(chan struct{}),
+		isTTY:    utils.IsTTY(),
 	}
 }
 
@@ -47,6 +50,12 @@ func (s *Spinner) Start(message string) {
 	s.model.state = "running"
 	s.model.text = message
 	s.startTime = time.Now()
+
+	// If not in TTY, just print the message
+	if !s.isTTY {
+		fmt.Printf("⏺ %s\n", message)
+		return
+	}
 
 	s.program = tea.NewProgram(s.model)
 	go func() {
@@ -58,11 +67,18 @@ func (s *Spinner) Start(message string) {
 }
 
 func (s *Spinner) Stop() {
+	if !s.isTTY {
+		return
+	}
 	s.program.Send(doneMsg{duration: time.Since(s.startTime)})
 	<-s.doneChan
 }
 
 func (s *Spinner) UpdateText(text string) {
+	if !s.isTTY {
+		fmt.Printf("⏺ %s\n", text)
+		return
+	}
 	s.program.Send(updateTextMsg(text))
 }
 
